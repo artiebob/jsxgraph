@@ -376,7 +376,8 @@ define([
                 }
             }
             if (el.htmlStr !== content) {
-                el.rendNodeText.data = content;
+				//el.rendNodeText.data = content;
+                el.rendNode.innerHTML = content; //changed so entities display properly
                 el.htmlStr = content;
             }
             this.transformImage(el, el.transformations);
