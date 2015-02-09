@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2013
+    Copyright 2008-2014
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -125,7 +125,7 @@ define([
             tangent = parents[0];
             tglide = tangent.glider;
         } else if (parents.length === 2 &&
-                parents[0].elementClass === Const.OBJECT_CLASS_LINE && parents[1].elementClass === Const.OBJECT_CLASS_POINT) {
+                parents[0].elementClass === Const.OBJECT_CLASS_LINE && Type.isPoint(parents[1])) {
             tangent = parents[0];
             tglide = parents[1];
         } else {
@@ -156,20 +156,20 @@ define([
 
         attr = Type.copyAttributes(attributes, board.options, 'slopetriangle', 'label');
         label = board.create('text', [
-                function() { return glider.X() + 0.1;}, 
-                function() { return (glider.Y() + toppoint.Y()) * 0.5;},
-                function() { return ''; }
-            ], attr);
-        
-        label._setText(function() { return el.Value().toFixed(label.visProp.digits); });
+            function () { return glider.X() + 0.1; },
+            function () { return (glider.Y() + toppoint.Y()) * 0.5; },
+            function () { return ''; }
+        ], attr);
+
+        label._setText(function () { return el.Value().toFixed(label.visProp.digits); });
         label.prepareUpdate().update().updateRenderer();
-        
+
         el.glider = glider;
         el.basepoint = basepoint;
         el.baseline = baseline;
         el.toppoint = toppoint;
         el.label = label;
-        
+
         el.methodMap = JXG.deepCopy(el.methodMap, {
             tangent: 'tangent',
             glider: 'glider',

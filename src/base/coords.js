@@ -79,7 +79,7 @@ define([
          */
         this.usrCoords = [];
         //this.usrCoords = new Float64Array(3);
-        
+
         /**
          * Stores coordinates for screen view as homogeneous coordinates.
          * @type Array
@@ -125,14 +125,14 @@ define([
                 uc = this.usrCoords,
                 oc = b.origin.scrCoords;
 
-            if (doRound === null || doRound) {
-                this.scrCoords[0] = mround(uc[0]);
-                this.scrCoords[1] = mround(uc[0] * oc[1] + uc[1] * b.unitX);
-                this.scrCoords[2] = mround(uc[0] * oc[2] - uc[2] * b.unitY);
-            } else {
+            if (doRound === false) {
                 this.scrCoords[0] = uc[0];
                 this.scrCoords[1] = uc[0] * oc[1] + uc[1] * b.unitX;
                 this.scrCoords[2] = uc[0] * oc[2] - uc[2] * b.unitY;
+            } else {
+                this.scrCoords[0] = mround(uc[0]);
+                this.scrCoords[1] = mround(uc[0] * oc[1] + uc[1] * b.unitX);
+                this.scrCoords[2] = mround(uc[0] * oc[2] - uc[2] * b.unitY);
             }
         },
 
@@ -238,18 +238,14 @@ define([
         * @returns {Array} Returns copy of the coords array either as standard array or as
         *   typed array.
         */
-        copy: function(obj, offset) {
+        copy: function (obj, offset) {
             if (typeof offset === 'undefined') {
                 offset = 0;
             }
-            
+
             return this[obj].slice(offset);
-            
-            //var dest = new Float64Array(3);
-            //dest.set(this[obj]);
-            //return dest;
         },
-        
+
         /**
          * Triggered whenever the coordinates change.
          * @name JXG.Coords#update

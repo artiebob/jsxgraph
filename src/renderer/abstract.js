@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2013
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -354,7 +354,7 @@ define([
                These 10 units are scaled to strokeWidth*3 pixels or minlen pixels.
             */
             if (element.visProp.lastarrow || element.visProp.firstarrow) {
-                
+
                 s1 = element.point1.visProp.size;
                 s2 = element.point2.visProp.size;
                 s = s1 + s2;
@@ -374,23 +374,23 @@ define([
                         c1 = new Coords(Const.COORDS_BY_SCREEN, [c1.scrCoords[1] + d1x, c1.scrCoords[2] + d1y], element.board);
                     }
                 }
-                
+
                 s = Math.max(parseInt(element.visProp.strokewidth, 10) * 3, minlen);
                 d = c1.distance(Const.COORDS_BY_SCREEN, c2);
-                if (element.visProp.lastarrow && element.board.renderer.type !== 'vml' && d >= minlen/*Mat.eps*/) {
+                if (element.visProp.lastarrow && element.board.renderer.type !== 'vml' && d >= minlen) {
                     d2x = (c2.scrCoords[1] - c1.scrCoords[1]) * s / d;
                     d2y = (c2.scrCoords[2] - c1.scrCoords[2]) * s / d;
                 }
-                if (element.visProp.firstarrow && element.board.renderer.type !== 'vml' && d >= minlen /* Mat.eps*/) {
+                if (element.visProp.firstarrow && element.board.renderer.type !== 'vml' && d >= minlen) {
                     d1x = (c2.scrCoords[1] - c1.scrCoords[1]) * s / d;
                     d1y = (c2.scrCoords[2] - c1.scrCoords[2]) * s / d;
                 }
             }
-            
+
             this.updateLinePrim(element.rendNode,
                 c1.scrCoords[1] + d1x, c1.scrCoords[2] + d1y,
                 c2.scrCoords[1] - d2x, c2.scrCoords[2] - d2y, element.board);
-            
+
             this.makeArrows(element);
             this._updateVisual(element);
         },
@@ -522,10 +522,30 @@ define([
          * @see JXG.AbstractRenderer#drawPolygon
          */
         updatePolygon: function (element) {
+            var i, len, polIsReal;
+
             // here originally strokecolor wasn't updated but strokewidth was
             // but if there's no strokecolor i don't see why we should update strokewidth.
             this._updateVisual(element, {stroke: true, dash: true});
             this.updatePolygonPrim(element.rendNode, element);
+
+            len = element.vertices.length;
+            polIsReal = true;
+            for (i = 0; i < len; ++i) {
+                if (!element.vertices[i].isReal) {
+                    polIsReal = false;
+                    break;
+                }
+            }
+
+            len = element.borders.length;
+            for (i = 0; i < len; ++i) {
+                if (polIsReal && element.borders[i].visProp.visible) {
+                    this.show(element.borders[i]);
+                } else {
+                    this.hide(element.borders[i]);
+                }
+            }
         },
 
         /* **************************
@@ -794,7 +814,7 @@ define([
         /**
          * Multiplication of transformations without updating. That means, at that point it is expected that the
          * matrices contain numbers only. First, the origin in user coords is translated to <tt>(0,0)</tt> in screen
-         * coords. Then, the stretch factors are divided out. After the transformations in user coords, the  stretch
+         * coords. Then, the stretch factors are divided out. After the transformations in user coords, the stretch
          * factors are multiplied in again, and the origin in user coords is translated back to its position. This
          * method does not have to be implemented in a new renderer.
          * @param {JXG.GeometryElement} element A JSXGraph element. We only need its board property.
@@ -804,12 +824,13 @@ define([
          */
         joinTransforms: function (element, transformations) {
             var i,
-                m = [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
                 ox = element.board.origin.scrCoords[1],
                 oy = element.board.origin.scrCoords[2],
                 ux = element.board.unitX,
                 uy = element.board.unitY,
                 // Translate to 0,0 in screen coords
+                /*
+                m = [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
                 mpre1 =  [[1,   0, 0],
                     [-ox, 1, 0],
                     [-oy, 0, 1]],
@@ -825,15 +846,24 @@ define([
                 mpost1 = [[1,  0, 0],
                     [ox, 1, 0],
                     [oy, 0, 1]],
-                len = transformations.length;
+                */
+                len = transformations.length,
+                // Translate to 0,0 in screen coords and then scale
+                m = [[1,        0,       0],
+                     [-ox / ux, 1 / ux,  0],
+                     [ oy / uy, 0, -1 / uy]];
 
             for (i = 0; i < len; i++) {
-                m = Mat.matMatMult(mpre1, m);
-                m = Mat.matMatMult(mpre2, m);
+                //m = Mat.matMatMult(mpre1, m);
+                //m = Mat.matMatMult(mpre2, m);
                 m = Mat.matMatMult(transformations[i].matrix, m);
-                m = Mat.matMatMult(mpost2, m);
-                m = Mat.matMatMult(mpost1, m);
+                //m = Mat.matMatMult(mpost2, m);
+                //m = Mat.matMatMult(mpost1, m);
             }
+            // Scale back and then translate back
+            m = Mat.matMatMult([[1,   0, 0],
+                                [ox, ux, 0],
+                                [oy,  0, -uy]], m);
             return m;
         },
 
@@ -1143,7 +1173,7 @@ define([
                             element.borders[i].visProp.highlightstrokeopacity);
                     }
                 } else {
-                    if (element.type === Const.OBJECT_TYPE_TEXT) {
+                    if (element.elementClass === Const.OBJECT_CLASS_TEXT) {
                         this.updateTextStyle(element, true);
                     } else if (element.type === Const.OBJECT_TYPE_IMAGE) {
                         this.updateImageStyle(element, true);
@@ -1177,7 +1207,7 @@ define([
                             element.borders[i].visProp.strokeopacity);
                     }
                 } else {
-                    if (element.type === Const.OBJECT_TYPE_TEXT) {
+                    if (element.elementClass === Const.OBJECT_CLASS_TEXT) {
                         this.updateTextStyle(element, false);
                     } else if (element.type === Const.OBJECT_TYPE_IMAGE) {
                         this.updateImageStyle(element, false);
@@ -1234,7 +1264,7 @@ define([
 
                     button = doc.createElement('span');
                     node.appendChild(button);
-                    button.appendChild(board.containerObj.ownerDocument.createTextNode(label));
+                    button.appendChild(doc.createTextNode(label));
                     Env.addEvent(button, 'mouseover', function () {
                         this.style.backgroundColor = board.options.navbar.highlightFillColor;
                     }, button);
@@ -1280,7 +1310,7 @@ define([
                         board.reload();
                     });
                 }
-                
+
                 if (board.attr.showcleartraces) {
                     // clear traces symbol (otimes): \u27F2
                     createButton('\u00A0\u2297\u00A0', function () {

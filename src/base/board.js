@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2014
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -146,8 +146,14 @@ define([
          * Pointer to the document element containing the board.
          * @type Object
          */
-        this.document = attributes.document || document;
-        
+        // Former version:
+        // this.document = attributes.document || document;
+        if (Type.exists(attributes.document) && attributes.document !== false) {
+            this.document = attributes.document;
+        } else if (typeof document === 'object') {
+            this.document = document;
+        }
+
         /**
          * The html-id of the html element containing the board.
          * @type String
@@ -227,6 +233,12 @@ define([
          * @type Number
          */
         this.unitY = unitY * this.zoomY;
+
+        /**
+         * Keep aspect ratio if bounding box is set and the width/height ratio differs from the 
+         * width/height ratio of the canvas.
+         */
+        this.keepaspectratio = false;
 
         /**
          * Canvas width.
@@ -555,7 +567,7 @@ define([
                 return '';
             }
 
-            if (object.elementClass === Const.OBJECT_CLASS_POINT) {
+            if (Type.isPoint(object)) {
                 // points have capital letters
                 possibleNames = ['', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O',
                     'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
@@ -569,14 +581,14 @@ define([
                     'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'];
             }
 
-            if (object.elementClass !== Const.OBJECT_CLASS_POINT &&
+            if (!Type.isPoint(object) &&
                     object.elementClass !== Const.OBJECT_CLASS_LINE &&
                     object.type !== Const.OBJECT_TYPE_ANGLE) {
                 if (object.type === Const.OBJECT_TYPE_POLYGON) {
                     pre = 'P_{';
                 } else if (object.elementClass === Const.OBJECT_CLASS_CIRCLE) {
                     pre = 'k_{';
-                } else if (object.type === Const.OBJECT_TYPE_TEXT) {
+                } else if (object.elementClass === Const.OBJECT_CLASS_TEXT) {
                     pre = 't_{';
                 } else {
                     pre = 's_{';
@@ -695,7 +707,7 @@ define([
              */
             if (this.cPos.length > 0 &&
                     (this.mode === this.BOARD_MODE_DRAG || this.mode === this.BOARD_MODE_MOVE_ORIGIN ||
-                    (new Date()).getTime() - this.positionAccessLast < 500)) {
+                    (new Date()).getTime() - this.positionAccessLast < 1000)) {
                 return this.cPos;
             }
 
@@ -738,9 +750,8 @@ define([
                     cPos[1] += Env.getProp(container, 'padding-top');
                 }
 
-                this.cpos = cPos;
-
-                return this.cpos;
+                this.cPos = cPos.slice();
+                return this.cPos;
             }
 
             cPos = Env.getOffset(container);
@@ -789,9 +800,8 @@ define([
             cPos[0] += this.attr.offsetx;
             cPos[1] += this.attr.offsety;
 
-            this.cPos = cPos;
-
-            return cPos;
+            this.cPos = cPos.slice();
+            return this.Pos;
         },
 
         /**
@@ -872,8 +882,8 @@ define([
                 }
 
                 if (((this.geonextCompatibilityMode &&
-                        (pEl.elementClass === Const.OBJECT_CLASS_POINT || 
-                          pEl.type === Const.OBJECT_TYPE_TEXT)) ||
+                        (Type.isPoint(pEl) ||
+                          pEl.elementClass === Const.OBJECT_CLASS_TEXT)) ||
                         !this.geonextCompatibilityMode) &&
                         pEl.isDraggable &&
                         pEl.visProp.visible &&
@@ -883,11 +893,11 @@ define([
                     if (pEl.visProp.layer > dragEl.visProp.layer ||
                             (pEl.visProp.layer === dragEl.visProp.layer && pEl.lastDragTime.getTime() >= dragEl.lastDragTime.getTime())) {
                         // If an element and its label have the focus
-                        // simultaneously, the element is taken
-                        // this only works if we assume that every browser runs
+                        // simultaneously, the element is taken.
+                        // This only works if we assume that every browser runs
                         // through this.objects in the right order, i.e. an element A
                         // added before element B turns up here before B does.
-                        if (!Type.exists(dragEl.label) || pEl !== dragEl.label) {
+                        if (!this.attr.ignorelabels || (!Type.exists(dragEl.label) || pEl !== dragEl.label)) {
                             dragEl = pEl;
                             collect[0] = dragEl;
 
@@ -936,10 +946,10 @@ define([
 
             if (drag.type !== Const.OBJECT_TYPE_GLIDER) {
                 if (!isNaN(o.targets[0].Xprev + o.targets[0].Yprev)) {
-                    drag.setPositionDirectly(Const.COORDS_BY_SCREEN, 
-                    //newPos.scrCoords.slice(1), 
-                    [newPos.scrCoords[1], newPos.scrCoords[2]], 
-                    [o.targets[0].Xprev, o.targets[0].Yprev]);
+                    drag.setPositionDirectly(Const.COORDS_BY_SCREEN,
+                        [newPos.scrCoords[1], newPos.scrCoords[2]],
+                        [o.targets[0].Xprev, o.targets[0].Yprev]
+                        );
                 }
                 // Remember the actual position for the next move event. Then we are able to
                 // compute the difference vector.
@@ -1212,10 +1222,19 @@ define([
                 for (i = 0; i < len; i++) {
                     xy.push(obj.vertices[i].coords.usrCoords);
                 }
-            } else if (obj.elementClass === Const.OBJECT_CLASS_POINT || obj.type === Const.OBJECT_TYPE_GLIDER) {
+            } else if (obj.type === Const.OBJECT_TYPE_SECTOR) {
+                xy.push(obj.point1.coords.usrCoords);
+                xy.push(obj.point2.coords.usrCoords);
+                xy.push(obj.point3.coords.usrCoords);
+            } else if (Type.isPoint(obj) || obj.type === Const.OBJECT_TYPE_GLIDER) {
                 xy.push(obj.coords.usrCoords);
-            //} else if (obj.elementClass === Const.OBJECT_CLASS_CURVE) {
-            // TODO
+            } else if (obj.elementClass === Const.OBJECT_CLASS_CURVE) {
+                if (JXG.exists(obj.parents)) {
+                    len = obj.parents.length;
+                    for (i = 0; i < len; i++) {
+                        xy.push(this.select(obj.parents[i]).coords.usrCoords);
+                    }
+                }
             } else {
                 try {
                     xy.push(obj.coords.usrCoords);
@@ -1554,8 +1573,8 @@ define([
                     Env.addEvent(this.document, 'MSPointerUp', this.pointerUpListener, this);
                 }
                 this.hasPointerUp = true;
-            } 
-            
+            }
+
             if (this.hasMouseHandlers) {
                 this.removeMouseEventHandlers();
             }
@@ -1739,9 +1758,11 @@ define([
                 }
             }
 
-            if (this.mode !== this.BOARD_MODE_DRAG) {
-                this.renderer.hide(this.infobox);
-            }
+            // Hiding the infobox is commentet out, since it prevents showing the infobox
+            // on IE 11+ on 'over'
+            //if (this.mode !== this.BOARD_MODE_DRAG) {
+                //this.renderer.hide(this.infobox);
+            //}
 
             this.options.precision.hasPoint = this.options.precision.mouse;
             this.triggerEventHandlers(['touchmove', 'move', 'pointermove', 'MSPointerMove'], [evt, this.mode]);
@@ -1915,10 +1936,10 @@ define([
                     if (elements.length !== 0) {
                         obj = elements[elements.length - 1];
 
-                        if (Type.isPoint(obj) || 
-                            obj.type === Const.OBJECT_TYPE_TEXT || 
-                            obj.type === Const.OBJECT_TYPE_TICKS ||
-                            obj.type === Const.OBJECT_TYPE_IMAGE) {
+                        if (Type.isPoint(obj) ||
+                                obj.elementClass === Const.OBJECT_CLASS_TEXT ||
+                                obj.type === Const.OBJECT_TYPE_TICKS ||
+                                obj.type === Const.OBJECT_TYPE_IMAGE) {
                             // it's a point, so it's single touch, so we just push it to our touches
                             targets = [{ num: i, X: evtTouches[i].screenX, Y: evtTouches[i].screenY, Xprev: NaN, Yprev: NaN, Xstart: [], Ystart: [], Zstart: [] }];
 
@@ -1997,7 +2018,7 @@ define([
          * @return {Boolean}
          */
         touchMoveListener: function (evt) {
-            var i, pos, time,
+            var i, pos1, pos2, time,
                 evtTouches = evt[JXG.touchProperty];
 
             if (this.mode !== this.BOARD_MODE_NONE) {
@@ -2035,25 +2056,28 @@ define([
                         // Touch by one finger:  this is possible for all elements that can be dragged
                         if (this.touches[i].targets.length === 1) {
                             if (evtTouches[this.touches[i].targets[0].num]) {
+                                pos1 = this.getMousePosition(evt, this.touches[i].targets[0].num);
+                                if (pos1[0] < 0 || pos1[0] > this.canvasWidth ||  pos1[1] < 0 || pos1[1] > this.canvasHeight) {
+                                    return;
+                                }
                                 this.touches[i].targets[0].X = evtTouches[this.touches[i].targets[0].num].screenX;
                                 this.touches[i].targets[0].Y = evtTouches[this.touches[i].targets[0].num].screenY;
-                                pos = this.getMousePosition(evt, this.touches[i].targets[0].num);
-                                this.moveObject(pos[0], pos[1], this.touches[i], evt, 'touch');
+                                this.moveObject(pos1[0], pos1[1], this.touches[i], evt, 'touch');
                             }
                             // Touch by two fingers: moving lines
                         } else if (this.touches[i].targets.length === 2 && this.touches[i].targets[0].num > -1 && this.touches[i].targets[1].num > -1) {
                             if (evtTouches[this.touches[i].targets[0].num] && evtTouches[this.touches[i].targets[1].num]) {
+                                pos1 = this.getMousePosition(evt, this.touches[i].targets[0].num);
+                                pos2 = this.getMousePosition(evt, this.touches[i].targets[1].num);
+                                if (pos1[0] < 0 || pos1[0] > this.canvasWidth ||  pos1[1] < 0 || pos1[1] > this.canvasHeight ||
+                                        pos2[0] < 0 || pos2[0] > this.canvasWidth ||  pos2[1] < 0 || pos2[1] > this.canvasHeight) {
+                                    return;
+                                }
                                 this.touches[i].targets[0].X = evtTouches[this.touches[i].targets[0].num].screenX;
                                 this.touches[i].targets[0].Y = evtTouches[this.touches[i].targets[0].num].screenY;
                                 this.touches[i].targets[1].X = evtTouches[this.touches[i].targets[1].num].screenX;
                                 this.touches[i].targets[1].Y = evtTouches[this.touches[i].targets[1].num].screenY;
-                                this.twoFingerMove(
-                                    this.getMousePosition(evt, this.touches[i].targets[0].num),
-                                    this.getMousePosition(evt, this.touches[i].targets[1].num),
-                                    this.touches[i],
-                                    evt
-                                );
-
+                                this.twoFingerMove(pos1, pos2, this.touches[i], evt);
                             }
                         }
                     }
@@ -2219,7 +2243,7 @@ define([
                 Env.addEvent(this.document, 'mouseup', this.mouseUpListener, this);
                 this.hasMouseUp = true;
             } else {
-                // In case this.hasMouseUp==true, it may be that there was a 
+                // In case this.hasMouseUp==true, it may be that there was a
                 // mousedown event before which was not followed by an mouseup event.
                 // This seems to happen with interactive whiteboard pens sometimes.
                 return;
@@ -2385,7 +2409,7 @@ define([
             if (!el.visProp.showinfobox) {
                 return this;
             }
-            if (el.elementClass === Const.OBJECT_CLASS_POINT) {
+            if (Type.isPoint(el)) {
                 xc = el.coords.usrCoords[1];
                 yc = el.coords.usrCoords[2];
 
@@ -2605,9 +2629,9 @@ define([
                         t = e.coords.usrCoords[what];
 
                         if (what === 2) {
-                            e.setPositionDirectly(JXG.COORDS_BY_USER, [f(), t]);
+                            e.setPositionDirectly(Const.COORDS_BY_USER, [f(), t]);
                         } else {
-                            e.setPositionDirectly(JXG.COORDS_BY_USER, [t, f()]);
+                            e.setPositionDirectly(Const.COORDS_BY_USER, [t, f()]);
                         }
                         e.prepareUpdate().update();
                     };
@@ -3120,12 +3144,22 @@ define([
 
         /**
          * Change the height and width of the board's container.
+         * After doing so, {@link JXG.JSXGraph#setBoundingBox} is called using
+         * the actual size of the bounding box and the actual value of keepaspectratio.
+         * If setBoundingbox() should not be called automatically, 
+         * call resizeContainer with dontSetBoundingBox == true.
          * @param {Number} canvasWidth New width of the container.
          * @param {Number} canvasHeight New height of the container.
-         * @param {Boolean} [dontset=false] Do not set the height of the DOM element.
+         * @param {Boolean} [dontset=false] If true do not set the height of the DOM element.
+         * @param {Boolean} [dontSetBoundingBox=false] If true do not call setBoundingBox().
          * @returns {JXG.Board} Reference to the board
          */
-        resizeContainer: function (canvasWidth, canvasHeight, dontset) {
+        resizeContainer: function (canvasWidth, canvasHeight, dontset, dontSetBoundingBox) {
+            var box;
+
+            if (!dontSetBoundingBox) {
+                box = this.getBoundingBox();
+            }
             this.canvasWidth = parseInt(canvasWidth, 10);
             this.canvasHeight = parseInt(canvasHeight, 10);
 
@@ -3135,6 +3169,10 @@ define([
             }
 
             this.renderer.resize(this.canvasWidth, this.canvasHeight);
+
+            if (!dontSetBoundingBox) {
+                this.setBoundingBox(box, this.keepaspectratio);
+            }
 
             return this;
         },
@@ -3194,10 +3232,24 @@ define([
         prepareUpdate: function () {
             var el, pEl, len = this.objectsList.length;
 
+            /*
+            if (this.attr.updatetype === 'hierarchical') {
+                return this;
+            }
+            */
+
             for (el = 0; el < len; el++) {
                 pEl = this.objectsList[el];
                 pEl.needsUpdate = pEl.needsRegularUpdate || this.needsFullUpdate;
             }
+
+            for (el in this.groups) {
+                if (this.groups.hasOwnProperty(el)) {
+                    pEl = this.groups[el];
+                    pEl.needsUpdate = pEl.needsRegularUpdate || this.needsFullUpdate;
+                }
+            }
+
             return this;
         },
 
@@ -3208,8 +3260,21 @@ define([
          */
         updateElements: function (drag) {
             var el, pEl;
+            //var childId, i = 0;
 
             drag = this.select(drag);
+
+            /*
+            if (Type.exists(drag)) {
+                for (el = 0; el < this.objectsList.length; el++) {
+                    pEl = this.objectsList[el];
+                    if (pEl.id === drag.id) {
+                        i = el;
+                        break;
+                    }
+                }
+            }
+            */
 
             for (el = 0; el < this.objectsList.length; el++) {
                 pEl = this.objectsList[el];
@@ -3217,6 +3282,14 @@ define([
                 // other elements are updated.
                 // The difference lies in the treatment of gliders.
                 pEl.update(!Type.exists(drag) || pEl.id !== drag.id);
+
+                /*
+                if (this.attr.updatetype === 'hierarchical') {
+                    for (childId in pEl.childElements) {
+                        pEl.childElements[childId].needsUpdate = pEl.childElements[childId].needsRegularUpdate;
+                    }
+                }
+                */
             }
 
             // update groups last
@@ -3408,6 +3481,7 @@ define([
             }
 
             this.prepareUpdate().updateElements(drag).updateConditions();
+
             this.renderer.suspendRedraw(this);
             this.updateRenderer();
             this.renderer.unsuspendRedraw();
@@ -3599,9 +3673,11 @@ define([
                 } else {
                     this.unitX = Math.abs(this.unitY) * this.unitX / Math.abs(this.unitX);
                 }
+                this.keepaspectratio = true;
             } else {
                 this.unitX = w / (bbox[2] - bbox[0]);
                 this.unitY = h / (bbox[1] - bbox[3]);
+                this.keepaspectratio = false;
             }
 
             this.moveOrigin(-this.unitX * bbox[0], this.unitY * bbox[1]);

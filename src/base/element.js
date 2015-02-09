@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2013
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -46,8 +46,8 @@
  */
 
 define([
-    'jxg', 'base/constants', 'base/coords', 'math/math', 'options', 'parser/geonext', 'utils/event', 'utils/color', 'utils/type'
-], function (JXG, Const, Coords, Mat, Options, GeonextParser, EventEmitter, Color, Type) {
+    'jxg', 'base/constants', 'base/coords', 'math/math', 'math/statistics', 'options', 'parser/geonext', 'utils/event', 'utils/color', 'utils/type'
+], function (JXG, Const, Coords, Mat, Statistics, Options, GeonextParser, EventEmitter, Color, Type) {
 
     "use strict";
 
@@ -155,10 +155,16 @@ define([
         this.descendants = {};
 
         /**
-         * Elements on which this elements depends on are stored here.
+         * Elements on which this element depends on are stored here.
          * @type Object
          */
         this.ancestors = {};
+
+        /**
+         * Ids of elements on which this element depends directly are stored here.
+         * @type Object
+         */
+        this.parents = [];
 
         /**
          * Stores variables for symbolic computations
@@ -240,6 +246,7 @@ define([
             addTransform: 'addTransform',
             setProperty: 'setAttribute',
             setAttribute: 'setAttribute',
+            addChild: 'addChild',
             animate: 'animate',
             on: 'on',
             off: 'off',
@@ -289,6 +296,13 @@ define([
              * @type number
              */
             this.type = type;
+
+            /**
+             * Original type of the element at construction time. Used for removing glider property.
+             * @constant
+             * @type number
+             */
+            this._org_type = type;
 
             /**
              * The element's class.
@@ -396,7 +410,34 @@ define([
         },
 
         /**
-         * Remove an element as a child from the current element. 
+         * Adds ids of elements to the array this.parents.
+         * @param {Array} parents Array of elements or ids of elements.
+         * Alternatively, one can give a list of objects as parameters.
+         * @returns {JXG.Object} reference to the object itself.
+         **/
+        addParents: function (parents) {
+            var i, len, par;
+
+            if (Type.isArray(parents)) {
+                par = parents;
+            } else {
+                par = arguments;
+            }
+
+            len = par.length;
+            for (i = 0; i < len; ++i) {
+                if (Type.isId(par[i])) {
+                    this.parents.push(par[i]);
+                } else if (Type.exists(par[i].id)) {
+                    this.parents.push(par[i].id);
+                }
+            }
+
+            this.parents = Type.uniqueArray(this.parents);
+        },
+
+        /**
+         * Remove an element as a child from the current element.
          * @param {JXG.GeometryElement} obj The dependent object.
          */
         removeChild: function (obj) {
@@ -487,7 +528,7 @@ define([
         },
 
         /**
-         * Decides whether an element can be dragged. This is used in setPositionDirectly methods
+         * Decides whether an element can be dragged. This is used in {@link JXG.GeometryElement#setPositionDirectly} methods
          * where all parent elements are checked if they may be dragged, too.
          * @private
          * @return {boolean}
@@ -495,6 +536,88 @@ define([
         draggable: function () {
             return this.isDraggable && !this.visProp.fixed &&
                 !this.visProp.frozen && this.type !== Const.OBJECT_TYPE_GLIDER;
+        },
+
+        /**
+         * Translates the object by <tt>(x, y)</tt>. In case the element is defined by points, the defining points are
+         * translated, e.g. a circle constructed by a center point and a point on the circle line.
+         * @param {Number} method The type of coordinates used here. 
+         * Possible values are {@link JXG.COORDS_BY_USER} and {@link JXG.COORDS_BY_SCREEN}.
+         * @param {Array} coords array of translation vector.
+         * @returns {JXG.GeometryElement} Reference to the element object.
+         */
+        setPosition: function (method, coords) {
+            var parents = [], el, i, len, t;
+
+            if (!JXG.exists(this.parents)) {
+                return this;
+            }
+
+            len = this.parents.length;
+            for (i = 0; i < len; ++i) {
+                el = this.board.select(this.parents[i]);
+                if (Type.isPoint(el)) {
+                    if (!el.draggable()) {
+                        return this;
+                    } else {
+                        parents.push(el);
+                    }
+                }
+            }
+
+            if (coords.length === 3) {
+                coords = coords.slice(1);
+            }
+
+            t = this.board.create('transform', coords, {type: 'translate'});
+
+            // We distinguish two cases:
+            // 1) elements which depend on free elements, i.e. arcs and sectors
+            // 2) other elements
+            //
+            // In the first case we simply transform the parents elements
+            // In the second case we add a transform to the element.
+            //
+            len = parents.length;
+            if (len > 0) {
+                t.applyOnce(parents);
+            } else {
+                if (this.transformations.length > 0 &&
+                        this.transformations[this.transformations.length - 1].isNumericMatrix) {
+                    this.transformations[this.transformations.length - 1].melt(t);
+                } else {
+                    this.addTransform(t);
+                }
+            }
+
+            /*
+             * If - against the default configuration - defining gliders are marked as 
+             * draggable, then their position has to be updated now.
+             */
+            for (i = 0; i < len; ++i) {
+                if (parents[i].type === Const.OBJECT_TYPE_GLIDER) {
+                    parents[i].updateGlider();
+                }
+            }
+
+            return this;
+        },
+
+        /**
+         * Moves an by the difference of two coordinates.
+         * @param {Number} method The type of coordinates used here. Possible values are {@link JXG.COORDS_BY_USER} and {@link JXG.COORDS_BY_SCREEN}.
+         * @param {Array} coords coordinates in screen/user units
+         * @param {Array} oldcoords previous coordinates in screen/user units
+         * @returns {JXG.GeometryElement} this element
+         */
+        setPositionDirectly: function (method, coords, oldcoords) {
+            var c = new Coords(method, coords, this.board, false),
+                oldc = new Coords(method, oldcoords, this.board, false),
+                dc = Statistics.subtract(c.usrCoords, oldc.usrCoords);
+
+            this.setPosition(Const.COORDS_BY_USER, dc);
+
+            return this;
         },
 
         /**
@@ -510,7 +633,7 @@ define([
         /**
          * Animates properties for that object like stroke or fill color, opacity and maybe
          * even more later.
-         * @param {Object} hash Object containing propiertes with target values for the animation.
+         * @param {Object} hash Object containing properties with target values for the animation.
          * @param {number} time Number of milliseconds to complete the animation.
          * @param {Object} [options] Optional settings for the animation:<ul><li>callback: A function that is called as soon as the animation is finished.</li></ul>
          * @returns {JXG.GeometryElement} A reference to the object
@@ -571,7 +694,7 @@ define([
                         animateColor(this.visProp[p], hash[r], p);
                         break;
                     case 'size':
-                        if (this.elementClass !== Const.OBJECT_CLASS_POINT) {
+                        if (!Type.isPoint(this)) {
                             break;
                         }
                         animateFloat(this.visProp[p], hash[r], p, true);
@@ -706,7 +829,9 @@ define([
          */
         setName: function (str) {
             str = str.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            this.setLabelText(str);
+            if (this.elType !== 'slider') {
+                this.setLabelText(str);
+            }
             this.setAttribute({name: str});
         },
 
@@ -789,7 +914,7 @@ define([
                             this.label.visProp.strokecolor = value;
                             this.board.renderer.setObjectStrokeColor(this.label, value, opacity);
                         }
-                        if (this.type === Const.OBJECT_TYPE_TEXT) {
+                        if (this.elementClass === Const.OBJECT_CLASS_TEXT) {
                             this.visProp.strokecolor = value;
                             this.visProp.strokeopacity = opacity;
                             this.board.renderer.setObjectStrokeColor(this, this.visProp.strokecolor, this.visProp.strokeopacity);
@@ -812,7 +937,7 @@ define([
                         }
                         break;
                     case 'face':
-                        if (this.elementClass === Const.OBJECT_CLASS_POINT) {
+                        if (Type.isPoint(this)) {
                             this.visProp.face = value;
                             this.board.renderer.changePointStyle(this);
                         }
@@ -865,7 +990,7 @@ define([
                         }
                         break;
                     case 'rotate':
-                        if ((this.type === Const.OBJECT_TYPE_TEXT && this.visProp.display === 'internal') ||
+                        if ((this.elementClass === Const.OBJECT_CLASS_TEXT && this.visProp.display === 'internal') ||
                                 this.type === Const.OBJECT_TYPE_IMAGE) {
                             this.addRotation(value);
                         }
@@ -1187,7 +1312,7 @@ define([
             var tOffInv, tOff, tS, tSInv, tRot,
                 that = this;
 
-            if (((this.type === Const.OBJECT_TYPE_TEXT && this.visProp.display === 'internal') ||
+            if (((this.elementClass === Const.OBJECT_CLASS_TEXT && this.visProp.display === 'internal') ||
                     this.type === Const.OBJECT_TYPE_IMAGE) && angle !== 0) {
 
                 tOffInv = this.board.create('transform', [
@@ -1362,8 +1487,8 @@ define([
 
         /**
          * Snaps the element to points. Only works for points. Points will snap to the next point
-         * as defined in their properties {@link JXG.Point#attractorDistance} and {@link JXG.Point#attractorUnit}. 
-         * Lines and circles 
+         * as defined in their properties {@link JXG.Point#attractorDistance} and {@link JXG.Point#attractorUnit}.
+         * Lines and circles
          * will snap their parent points to points.
          * @returns {JXG.GeometryElement} Reference to the element.
          */
@@ -1401,13 +1526,13 @@ define([
         hasPoint: function (x, y) {
             return false;
         },
-        
+
         /**
          * Move an element to its nearest grid point.
          * The function uses the coords object of the element as
          * its actual position. If there is no coords object, nothing is done.
          * @param {Boolean} force force snapping independent from what the snaptogrid attribute says
-         * @returns {JXG.Element} Reference to this element
+         * @returns {JXG.GeometryElement} Reference to this element
          */
         handleSnapToGrid: function (force) {
             var x, y, ticks,
@@ -1417,7 +1542,7 @@ define([
             if (!JXG.exists(this.coords)) {
                 return this;
             }
-            
+
             if (this.visProp.snaptogrid || force === true) {
                 x = this.coords.usrCoords[1];
                 y = this.coords.usrCoords[2];

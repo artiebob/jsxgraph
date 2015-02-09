@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2013
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -85,7 +85,7 @@ define(['utils/type', 'math/math'], function (Type, Mat) {
      * @name JXG.Math.Numerics
      */
     Mat.Numerics = {
-    
+
     //JXG.extend(Mat.Numerics, /** @lends JXG.Math.Numerics */ {
         /**
          * Solves a system of linear equations given by A and b using the Gauss-Jordan-elimination.
@@ -914,73 +914,73 @@ define(['utils/type', 'math/math'], function (Type, Mat) {
                 last = {},
                 makeFct,
                 _tau;
-                
-                if (Type.isFunction(tau)) {
-                    _tau = tau;
-                } else {
-                    _tau = function() { return tau; };
-                }
 
-                /** @ignore */
-                makeFct = function (which) {
-                    return function (t, suspendedUpdate) {
-                        var s, c,
-                            len = points.length,
-                            tau = _tau();
-                            
-                        if (len < 2) {
-                            return NaN;
+            if (Type.isFunction(tau)) {
+                _tau = tau;
+            } else {
+                _tau = function () { return tau; };
+            }
+
+            /** @ignore */
+            makeFct = function (which) {
+                return function (t, suspendedUpdate) {
+                    var s, c,
+                        len = points.length,
+                        tau = _tau();
+
+                    if (len < 2) {
+                        return NaN;
+                    }
+
+                    if (!suspendedUpdate) {
+                        first[which] = function () {
+                            return 2 * points[0][which]() - points[1][which]();
+                        };
+
+                        last[which] = function () {
+                            return 2 * points[len - 1][which]() - points[len - 2][which]();
+                        };
+
+                        p = [first].concat(points, [last]);
+                        coeffs[which] = [];
+
+                        for (s = 0; s < len - 1; s++) {
+                            coeffs[which][s] = [
+                                1 / tau * p[s + 1][which](),
+                                -p[s][which]() +   p[s + 2][which](),
+                                2 * p[s][which]() + (-3 / tau + 1) * p[s + 1][which]() + (3 / tau - 2) * p[s + 2][which]() - p[s + 3][which](),
+                                -p[s][which]() + (2 / tau - 1) * p[s + 1][which]() + (-2 / tau + 1) * p[s + 2][which]() + p[s + 3][which]()
+                            ];
                         }
+                    }
 
-                        if (!suspendedUpdate) {
-                            first[which] = function () {
-                                return 2 * points[0][which]() - points[1][which]();
-                            };
+                    len += 2;  // add the two control points
 
-                            last[which] = function () {
-                                return 2 * points[len - 1][which]() - points[len - 2][which]();
-                            };
+                    if (isNaN(t)) {
+                        return NaN;
+                    }
 
-                            p = [first].concat(points, [last]);
-                            coeffs[which] = [];
+                    // This is necessary for our advanced plotting algorithm:
+                    if (t <= 0.0) {
+                        return p[1][which]();
+                    }
 
-                            for (s = 0; s < len - 1; s++) {
-                                coeffs[which][s] = [
-                                    1 / tau * p[s + 1][which](),
-                                    -p[s][which]() +   p[s + 2][which](),
-                                    2 * p[s][which]() + (- 3 / tau + 1) * p[s + 1][which]() + (3 / tau - 2) * p[s + 2][which]() - p[s + 3][which](),
-                                    -p[s][which]() + (2 / tau - 1) * p[s + 1][which]() + (- 2 / tau + 1) * p[s + 2][which]() + p[s + 3][which]()
-                                ];
-                            }
-                        }
+                    if (t >= len - 3) {
+                        return p[len - 2][which]();
+                    }
 
-                        len += 2;  // add the two control points
+                    s = Math.floor(t);
 
-                        if (isNaN(t)) {
-                            return NaN;
-                        }
+                    if (s === t) {
+                        return p[s][which]();
+                    }
 
-                        // This is necessary for our advanced plotting algorithm:
-                        if (t <= 0.0) {
-                            return p[1][which]();
-                        }
+                    t -= s;
+                    c = coeffs[which][s];
 
-                        if (t >= len - 3) {
-                            return p[len - 2][which]();
-                        }
-
-                        s = Math.floor(t);
-
-                        if (s === t) {
-                            return p[s][which]();
-                        }
-
-                        t -= s;
-                        c = coeffs[which][s];
-
-                        return tau * (((c[3] * t + c[2]) * t + c[1]) * t + c[0]);
-                    };
+                    return tau * (((c[3] * t + c[2]) * t + c[1]) * t + c[0]);
                 };
+            };
 
             return [makeFct('X'), makeFct('Y'), 0,
                 function () {
@@ -1368,6 +1368,11 @@ define(['utils/type', 'math/math'], function (Type, Mat) {
                                 y = y1;
                             }
                         }
+
+                        y1 = f(x + delta);
+                        if (y1 < y) {
+                            y = y1;
+                        }
                     } else if (type === 'upper') {
                         y = f(x);
 
@@ -1377,6 +1382,11 @@ define(['utils/type', 'math/math'], function (Type, Mat) {
                             if (y1 > y) {
                                 y = y1;
                             }
+                        }
+
+                        y1 = f(x + delta);
+                        if (y1 > y) {
+                            y = y1;
                         }
                     } else if (type === 'random') {
                         y = f(x + delta * Math.random());
@@ -1452,6 +1462,11 @@ define(['utils/type', 'math/math'], function (Type, Mat) {
                                 y = y1;
                             }
                         }
+
+                        y1 = f(x + delta);
+                        if (y1 < y) {
+                            y = y1;
+                        }
                     } else if (type === 'upper') {
                         y = f(x);
 
@@ -1461,6 +1476,11 @@ define(['utils/type', 'math/math'], function (Type, Mat) {
                             if (y1 > y) {
                                 y = y1;
                             }
+                        }
+
+                        y1 = f(x + delta);
+                        if (y1 > y) {
+                            y = y1;
                         }
                     } else if (type === 'random') {
                         y = f(x + delta * Math.random());
@@ -1956,7 +1976,7 @@ define(['utils/type', 'math/math'], function (Type, Mat) {
         },
 
         /**
-         * Implements the Ramer-Douglas-Peuker algorithm.
+         * Implements the Ramer-Douglas-Peucker algorithm.
          * It discards points which are not necessary from the polygonal line defined by the point array
          * pts. The computation is done in screen coordinates.
          * Average runtime is O(nlog(n)), worst case runtime is O(n^2), where n is the number of points.
@@ -1965,11 +1985,11 @@ define(['utils/type', 'math/math'], function (Type, Mat) {
          * @returns {Array} An array containing points which represent an apparently identical curve as the points of pts do, but contains fewer points.
          * @memberof JXG.Math.Numerics
          */
-        RamerDouglasPeuker: function (pts, eps) {
+        RamerDouglasPeucker: function (pts, eps) {
             var newPts = [], i, k, len,
 
                 /**
-                 * findSplit() is a subroutine of {@link JXG.Math.Numerics#RamerDouglasPeuker}.
+                 * findSplit() is a subroutine of {@link JXG.Math.Numerics#RamerDouglasPeucker}.
                  * It searches for the point between index i and j which
                  * has the largest distance from the line between the points i and j.
                  * @param {Array} pts Array of {@link JXG.Coords}
@@ -1992,12 +2012,19 @@ define(['utils/type', 'math/math'], function (Type, Mat) {
                     ci = pts[i].scrCoords;
                     cj = pts[j].scrCoords;
 
-                    if (isNaN(ci[1] + ci[2] + cj[1] + cj[2])) {
+                    if (isNaN(ci[1] + ci[2])) {
+                        return [NaN, i];
+                    }
+                    if (isNaN(cj[1] + cj[2])) {
                         return [NaN, j];
                     }
 
                     for (k = i + 1; k < j; k++) {
                         ck = pts[k].scrCoords;
+                        if (isNaN(ck[1] + ck[2])) {
+                            return [NaN, k];
+                        }
+
                         x0 = ck[1] - ci[1];
                         y0 = ck[2] - ci[2];
                         x1 = cj[1] - ci[1];
@@ -2030,7 +2057,7 @@ define(['utils/type', 'math/math'], function (Type, Mat) {
                 },
 
                 /**
-                 * RDP() is a private subroutine of {@link JXG.Math.Numerics#RamerDouglasPeuker}.
+                 * RDP() is a private subroutine of {@link JXG.Math.Numerics#RamerDouglasPeucker}.
                  * It runs recursively through the point set and searches the
                  * point which has the largest distance from the line between the first point and
                  * the last point. If the distance from the line is greater than eps, this point is
@@ -2046,11 +2073,22 @@ define(['utils/type', 'math/math'], function (Type, Mat) {
                  * @private
                  */
                 RDP = function (pts, i, j, eps, newPts) {
-                    var result = findSplit(pts, i, j);
+                    var result = findSplit(pts, i, j),
+                        k = result[1];
 
-                    if (result[0] > eps) {
-                        RDP(pts, i, result[1], eps, newPts);
-                        RDP(pts, result[1], j, eps, newPts);
+                    if (isNaN(result[0])) {
+                        RDP(pts, i, k - 1, eps, newPts);
+                        newPts.push(pts[k]);
+                        do {
+                            ++k;
+                        } while (k <= j && isNaN(pts[k].scrCoords[1] + pts[k].scrCoords[2]));
+                        if (k <= j) {
+                            newPts.push(pts[k]);
+                        }
+                        RDP(pts, k + 1, j, eps, newPts);
+                    } else if (result[0] > eps) {
+                        RDP(pts, i, k, eps, newPts);
+                        RDP(pts, k, j, eps, newPts);
                     } else {
                         newPts.push(pts[j]);
                     }
@@ -2076,6 +2114,15 @@ define(['utils/type', 'math/math'], function (Type, Mat) {
             }
 
             return newPts;
+        },
+
+        /**
+         * Old name for the implementation of the Ramer-Douglas-Peucker algorithm.
+         * @deprecated Use {@link JXG.Math.Numerics#RamerDouglasPeucker}
+         * @memberof JXG.Math.Numerics
+         */
+        RamerDouglasPeuker: function (pts, eps) {
+            return this.RamerDouglasPeucker(pts, eps);
         }
     };
 

@@ -675,7 +675,7 @@ define([
                 }
 
                 this.board.update();
-            } else if (o.type === Const.OBJECT_TYPE_TEXT && (what === 'X' || what === 'Y')) {
+            } else if (o.elementClass === Const.OBJECT_CLASS_TEXT && (what === 'X' || what === 'Y')) {
                 if (typeof value === 'number') {
                     o[what] = function () { return value; };
                 } else if (typeof value === 'function') {
@@ -1932,12 +1932,15 @@ define([
                     deg: Geometry.trueAngle,
                     factorial: Mat.factorial,
                     trunc: Type.trunc,
+                    log: Mat.log,
                     ln: Math.log,
                     log10: Mat.log10,
                     lg: Mat.log10,
                     log2: Mat.log2,
                     lb: Mat.log2,
                     ld: Mat.log2,
+                    cosh: Mat.cosh,
+                    sinh: Mat.sinh,
                     IfThen: that.ifthen,
                     'import': that.importModule,
                     'use': that.use,
@@ -1971,6 +1974,8 @@ define([
             builtIn.log2.src = 'JXG.Math.log2';
             builtIn.lb.src = 'JXG.Math.log2';
             builtIn.ld.src = 'JXG.Math.log2';
+            builtIn.cosh.src = 'JXG.Math.cosh';
+            builtIn.sinh.src = 'JXG.Math.sinh';
             builtIn['import'].src = '$jc$.importModule';
             builtIn.use.src = '$jc$.use';
             builtIn.remove.src = '$jc$.del';

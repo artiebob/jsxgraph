@@ -124,7 +124,12 @@ define([
         initRenderer: function (box, dim, doc) {
             var boxid, renderer;
 
-            doc = doc || document;
+            // Former version:
+            // doc = doc || document
+            if ((!Type.exists(doc) || doc === false) && typeof document === 'object') {
+                doc = document;
+            }
+
             if (typeof doc === 'object' && box !== null) {
                 boxid = doc.getElementById(box);
 
@@ -218,15 +223,12 @@ define([
             renderer = this.initRenderer(box, dimensions, attr.document);
 
             // create the board
-            board = new Board(box, renderer, '', [originX, originY], attr.zoomfactor * attr.zoomx, attr.zoomfactor * attr.zoomy, unitX, unitY, dimensions.width, dimensions.height, attr);
+            board = new Board(box, renderer, attr.id, [originX, originY], attr.zoomfactor * attr.zoomx, attr.zoomfactor * attr.zoomy, unitX, unitY, dimensions.width, dimensions.height, attr);
 
-            // this is deprecated, but we'll keep it for now until everything is migrated
             JXG.boards[board.id] = board;
 
-            // the new board storage
-            JXG.boards[board.id] = board;
-
-            board.resizeContainer(dimensions.width, dimensions.height, true);
+            board.keepaspectratio = attr.keepaspectratio;
+            board.resizeContainer(dimensions.width, dimensions.height, true, true);
 
             // create elements like axes, grid, navigation, ...
             board.suspendUpdate();
@@ -279,13 +281,13 @@ define([
             /* User default parameters, in parse* the values in the gxt files are submitted to board */
             board = new Board(box, renderer, '', [150, 150], 1, 1, 50, 50, dimensions.width, dimensions.height, attr);
             board.initInfobox();
-            board.resizeContainer(dimensions.width, dimensions.height, true);
+            board.resizeContainer(dimensions.width, dimensions.height, true, true);
 
             FileReader.parseFileContent(file, board, format, true, callback);
 
             board.renderer.drawZoomBar(board);
             JXG.boards[board.id] = board;
-            
+
             return board;
         },
 
@@ -319,13 +321,13 @@ define([
             /* User default parameters, in parse* the values in the gxt files are submitted to board */
             board = new Board(box, renderer, '', [150, 150], 1.0, 1.0, 50, 50, dimensions.width, dimensions.height, attr);
             board.initInfobox();
-            board.resizeContainer(dimensions.width, dimensions.height, true);
+            board.resizeContainer(dimensions.width, dimensions.height, true, true);
 
             FileReader.parseString(string, board, format, true, callback);
 
             board.renderer.drawZoomBar(board);
             JXG.boards[board.id] = board;
-            
+
             return board;
         },
 
@@ -391,7 +393,7 @@ define([
         }
     };
 
-    // JessieScript/JessieCode startup: Search for script tags of type text/jessiescript and interpret them.
+    // JessieScript/JessieCode startup: Search for script tags of type text/jessiescript and interprete them.
     if (Env.isBrowser && typeof window === 'object' && typeof document === 'object') {
         Env.addEvent(window, 'load', function () {
             var type, i, j, div, id, board, width, height, bbox, axis, grid, code,

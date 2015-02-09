@@ -103,7 +103,7 @@
          * @returns {Object|Array|String} The gathered data
          */
         gEBTN: function (node, tag, idx, fc) {
-            var tmp;
+            var tmp = [];
 
             if (!JXG.exists(node || !node.getElementsByTagName)) {
                 return node;
@@ -115,7 +115,10 @@
             }
 
             idx = idx || 0;
-            tmp = node.getElementsByTagName(tag);
+
+            if (node.getElementsByTagName) {
+                tmp = node.getElementsByTagName(tag);
+            }
             if (tmp.length > 0) {
                 tmp = tmp[idx];
                 if (fc && tmp.firstChild) {
@@ -164,6 +167,7 @@
             gxtEl.labelColor = rgbo[0];
             gxtEl.withLabel = rgbo[1] > 0;
             gxtEl.labelOpacity = rgbo[1];
+            
             gxtEl.colorDraft = JXG.rgba2rgbo(this.gEBTN(color, 'draft'))[0];
 
             // backwards compatibility
@@ -588,7 +592,8 @@
                 gxtEl = this.transformProperties(gxtEl, 'point');
                 try {
                     gxtEl.parent = this.changeOriginIds(board, gxtEl.parent);
-
+                    gxtEl.isGeonext = true;
+                    
                     p = board.create('glider', [parseFloat(gxtEl.x), parseFloat(gxtEl.y), gxtEl.parent], gxtEl);
                     p.onPolygon = JXG.exists(gxtEl.onpolygon) && JXG.str2Bool(gxtEl.onpolygon);
 
@@ -977,6 +982,7 @@
                 gxtEl = this.firstLevelProperties(gxtEl, Data);
                 gxtEl = this.readNodes(gxtEl, Data, 'data');
                 gxtEl = this.transformProperties(gxtEl);
+                gxtEl.radius *= 1.0;
 
                 c = board.create('angle', [gxtEl.first, gxtEl.middle, gxtEl.last], gxtEl);
                 this.printDebugMessage('debug', gxtEl, Data.nodeName, 'OK');
@@ -1024,7 +1030,7 @@
                 }
                 gxtEl.parent = this.changeOriginIds(board, gxtEl.parent);
 
-                c = board.create('text', [gxtEl.x, gxtEl.y, gxtEl.mpStr], {
+                c = board.create('text', [parseFloat(gxtEl.x), parseFloat(gxtEl.y), gxtEl.mpStr], {
                     anchor: gxtEl.parent,
                     id: gxtEl.id,
                     name: gxtEl.name,
@@ -1116,6 +1122,7 @@
             xmlNode = this.gEBTN(boardData, 'coordinates', 0, false);
 
             tmp = this.readViewPort(xmlNode);
+            
             if (tmp.length === 4) {
                 board.setBoundingBox(tmp, true);
             } else {

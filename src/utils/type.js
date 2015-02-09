@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2013
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -148,6 +148,28 @@ define([
         },
 
         /**
+         * Checks if a given variable is a reference of a JSXGraph Point element or an array of length at least two or
+         * a function returning an array of length two or three.
+         * @param v A variable of any type.
+         * @returns {Boolean} True, if v is of type JXG.Point.
+         */
+        isPointType: function (v, board) {
+            var val;
+
+            v = board.select(v);
+            if (this.isArray(v)) {
+                return true;
+            }
+            if (this.isFunction(v)) {
+                val = v();
+                if (this.isArray(val) && val.length > 1) {
+                    return true;
+                }
+            }
+            return this.isPoint(v);
+        },
+
+        /**
          * Checks if a given variable is neither undefined nor null. You should not use this together with global
          * variables!
          * @param v A variable of any type.
@@ -259,6 +281,67 @@ define([
             }
 
             return f;
+        },
+
+        /**
+         *  Test if the parents array contains existing points. If instead parents contains coordinate arrays or function returning coordinate arrays
+         *  free points with these coordinates are created. 
+         * 
+         * @param {JXG.Board} board Board object
+         * @param {Array} parents Array containing parent elements for a new object. This array may contain
+         *    <ul>
+         *      <li> {@link JXG.Point} objects
+         *      <li> {@link JXG.Element#name} of {@link JXG.Point} objects
+         *      <li> {@link JXG.Element#id} of {@link JXG.Point} objects
+         *      <li> Coordinates of points given as array of numbers of length two or three, e.g. [2, 3].
+         *      <li> Coordinates of points given as array of functions of length two or three. Each function returns one coordinate, e.g.
+         *           [function(){ return 2; }, function(){ return 3; }]
+         *      <li> Function returning coordinates, e.g. function() { return [2, 3]; }
+         *    </ul>  
+         *  In the last three cases a new point will be created.
+         * @param {String} attrClass Main attribute class of newly created points, see {@link JXG@copyAttributes}
+         * @param {Array} attrArray List of subtype attributes for the newly created points. The list of subtypes is mapped to the list of new points.
+         * @returns {Array} List of newly created {@link JXG.Point} elements or false if not all returned elements are points.
+         */
+        providePoints: function (board, parents, attributes, attrClass, attrArray) {
+            var i, j,
+                len,
+                lenAttr = 0,
+                points = [], attr, p, val;
+
+            if (!this.isArray(parents)) {
+                parents = [parents];
+            }
+            len = parents.length;
+            if (JXG.exists(attrArray)) {
+                lenAttr = attrArray.length;
+            }
+            if (lenAttr === 0) {
+                attr = this.copyAttributes(attributes, board.options, attrClass);
+            }
+
+            for (i = 0; i < len; ++i) {
+                if (lenAttr > 0) {
+                    j = Math.min(i, lenAttr - 1);
+                    attr = this.copyAttributes(attributes, board.options, attrClass, attrArray[j]);
+                }
+                if (this.isArray(parents[i]) && parents[i].length > 1) {
+                    points.push(board.create('point', parents[i], attr));
+                } else if (this.isFunction(parents[i])) {
+                    val = parents[i]();
+                    if (this.isArray(val) && (val.length > 1)) {
+                        points.push(board.create('point', [parents[i]], attr));
+                    }
+                } else {
+                    points.push(board.select(parents[i]));
+                }
+
+                if (!this.isPoint(points[i])) {
+                    return false;
+                }
+            }
+
+            return points;
         },
 
         /**
@@ -489,12 +572,16 @@ define([
 
             /*jslint bitwise: true*/
 
-            if (p === 0) {
-                n = ~n;
-                n = ~n;
-            } else {
-                n = n.toFixed(p);
-            }
+            /* 
+             * The performance gain of this bitwise trick is marginal and the behavior 
+             * is different from toFixed: toFixed rounds, the bitweise operation truncateds
+             */
+            //if (p === 0) {
+            //    n = ~n;
+            //    n = ~n;
+            //} else {
+            n = n.toFixed(p);
+            //}
 
             return n;
         },
@@ -777,6 +864,25 @@ define([
             a.label = JXG.deepCopy(options.label, a.label);
 
             return a;
+        },
+
+        /**
+         * Copy all prototype methods from object "superObject" to object
+         * "subObject". The constructor of superObject will be available 
+         * in subObject as subObject.constructor[constructorName].
+         * @param {Object} subObj A JavaScript object which receives new methods.
+         * @param {Object} superObj A JavaScript object which lends its prototype methods to subObject
+         * @returns {String} constructorName Under this name the constructor of superObj will be available 
+         * in subObject.
+         * @private
+         */
+        copyPrototypeMethods: function (subObject, superObject, constructorName) {
+            var key;
+
+            subObject.prototype[constructorName] = superObject.prototype.constructor;
+            for (key in superObject.prototype)  {
+                subObject.prototype[key] = superObject.prototype[key];
+            }
         },
 
         /**

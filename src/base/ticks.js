@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2013
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -112,9 +112,27 @@ define([
                 ticks = attributes.defaultdistance;
             }
 
+            /*
+             * Ticks function:
+             * determines the distance (in user units) of two major ticks
+             */
             this.ticksFunction = function () {
-                return ticks;
+                var delta, b, dist;
+
+                if (this.visProp.insertticks) {
+                    b = this.getLowerAndUpperBounds(this.getZeroCoordinates(), 'ticksdistance');
+                    dist = b.upper - b.lower;
+                    delta = Math.pow(10, Math.floor(Math.log(0.6 * dist) / Math.LN10));
+                    if (dist <= 6 * delta) {
+                        delta *= 0.5;
+                    }
+                    return delta;
+                } else {
+                    // upto 0.99.1
+                    return ticks;
+                }
             };
+
             this.equidistant = true;
         }
 
@@ -364,10 +382,14 @@ define([
          * If {@link JXG.Ticks#includeBoundaries} is false, the boundaries will exclude point1 and point2
          *
          * @param  {JXG.Coords} coordsZero
-         * @return {Object}                contains the lower and upper bounds
+         * @return {String} type  (Optional) If type=='ticksdistance' the bounds are the intersection of the line with the bounding box of the board.
+         *              Otherwise it is the projection of the corners of the bounding box to the line. The first case i s needed to automatically 
+         *              generate ticks. The second case is for drawing of the ticks.
+         * @return {Object}     contains the lower and upper bounds
+         *                     
          * @private
          */
-        getLowerAndUpperBounds: function (coordsZero) {
+        getLowerAndUpperBounds: function (coordsZero, type) {
             var lowerBound, upperBound,
                 // The line's defining points that will be adjusted to be within the board limits
                 point1 = new Coords(Const.COORDS_BY_USER, this.line.point1.coords.usrCoords, this.board),
@@ -383,7 +405,15 @@ define([
                 dZeroPoint1, dZeroPoint2;
 
             // Adjust line limit points to be within the board
-            Geometry.calcLineDelimitingPoints(this.line, point1, point2);
+            if (JXG.exists(type) || type === 'tickdistance') {
+                // The good old calcStraight is needed for determining the distance between major ticks.
+                // Here, only the visual area is of importance
+                Geometry.calcStraight(this.line, point1, point2);
+            } else {
+                // This function projects the corners of the board to the line.
+                // This is important for diagonal lines with infinite tick lines.
+                Geometry.calcLineDelimitingPoints(this.line, point1, point2);
+            }
 
             // Calculate distance from Zero to P1 and to P2
             dZeroPoint1 = this.getDistanceFromZero(coordsZero, point1);
@@ -430,13 +460,14 @@ define([
          * @private
          */
         getDistanceFromZero: function (zero, point) {
-            var distance = zero.distance(Const.COORDS_BY_USER, point);
+            var eps = Mat.eps * Mat.eps,
+                distance = zero.distance(Const.COORDS_BY_USER, point);
 
             // Establish sign
             if (this.line.type === Const.OBJECT_TYPE_AXIS) {
-                if (zero.usrCoords[1] > point.usrCoords[1] ||
-                        (Math.abs(zero.usrCoords[1] - point.usrCoords[1]) < Mat.eps &&
-                        zero.usrCoords[2] > point.usrCoords[2])) {
+                if (zero.usrCoords[1] - point.usrCoords[1] > eps ||
+                        (Math.abs(zero.usrCoords[1] - point.usrCoords[1]) < eps &&
+                        zero.usrCoords[2] - point.usrCoords[2] > eps)) {
                     distance *= -1;
                 }
             } else if (this.visProp.anchor === 'right') {
@@ -467,20 +498,16 @@ define([
                 p2 = this.line.point2,
                 // Calculate X and Y distance between two major ticks
                 deltas = this.getXandYdeltas(),
-                // Distance between two major ticks in screen coordinates
-                distScr = p1.coords.distance(
-                    Const.COORDS_BY_SCREEN,
-                    new Coords(Const.COORDS_BY_USER, [p1.coords.usrCoords[1] + deltas.x, p1.coords.usrCoords[2] + deltas.y], this.board)
-                ),
                 // Distance between two major ticks in user coordinates
                 ticksDelta = (this.equidistant ? this.ticksFunction(1) : this.ticksDelta);
 
             // adjust ticks distance
             ticksDelta *= this.visProp.scale;
             if (this.visProp.insertticks && this.minTicksDistance > Mat.eps) {
-                ticksDelta *= this.adjustTickDistance(ticksDelta, distScr, coordsZero, deltas);
+                ticksDelta = this.adjustTickDistance(ticksDelta, coordsZero, deltas);
+                ticksDelta /= (this.visProp.minorticks + 1);
             } else if (!this.visProp.insertticks) {
-                ticksDelta /= this.visProp.minorticks + 1;
+                ticksDelta /= (this.visProp.minorticks + 1);
             }
             this.ticksDelta = ticksDelta;
 
@@ -513,37 +540,35 @@ define([
          * distance between two ticks depending on {@link JXG.Ticks#minTicksDistance} value
          *
          * @param  {Number}     ticksDelta  distance between two major ticks in user coordinates
-         * @param  {Number}     distScr     distance between two major ticks in screen coordinates
          * @param  {JXG.Coords} coordsZero  coordinates of the point considered zero
-         * @param  {Object}     deltas      x and y distance between two major ticks
+         * @param  {Object}     deltas      x and y distance in pixel between two user units
+         * @param  {Object}     bounds      upper and lower bound of the tick positions in user units.
          * @private
          */
-        adjustTickDistance: function (ticksDelta, distScr, coordsZero, deltas) {
-            var nx, ny, f = 1,
-                // This factor is for enlarging ticksDelta and it switches between 5 and 2
-                // Hence, if two major ticks are too close together they'll be expanded to a distance of 5
-                // if they're still too close together, they'll be expanded to a distance of 10 etc
-                factor = 5;
+        adjustTickDistance: function (ticksDelta, coordsZero, deltas) {
+            var nx, ny, bounds,
+                distScr, dist,
+                sgn = 1;
 
-            while (distScr > 4 * this.minTicksDistance) {
-                f /= 10;
-                nx = coordsZero.usrCoords[1] + deltas.x * ticksDelta * f;
-                ny = coordsZero.usrCoords[2] + deltas.y * ticksDelta * f;
+            bounds = this.getLowerAndUpperBounds(coordsZero, 'ticksdistance');
+            nx = coordsZero.usrCoords[1] + deltas.x * ticksDelta;
+            ny = coordsZero.usrCoords[2] + deltas.y * ticksDelta;
+            distScr = coordsZero.distance(Const.COORDS_BY_SCREEN, new Coords(Const.COORDS_BY_USER, [nx, ny], this.board));
+            dist = bounds.upper - bounds.lower;
+            while (distScr / (this.visProp.minorticks + 1) < this.minTicksDistance) {
+                if (sgn === 1) {
+                    ticksDelta *= 2;
+                } else {
+                    ticksDelta *= 5;
+                }
+                sgn *= -1;
+
+                nx = coordsZero.usrCoords[1] + deltas.x * ticksDelta;
+                ny = coordsZero.usrCoords[2] + deltas.y * ticksDelta;
                 distScr = coordsZero.distance(Const.COORDS_BY_SCREEN, new Coords(Const.COORDS_BY_USER, [nx, ny], this.board));
             }
-
-            // If necessary, enlarge ticksDelta
-            while (distScr <= this.minTicksDistance) {
-                f *= factor;
-                factor = (factor === 5 ? 2 : 5);
-                nx = coordsZero.usrCoords[1] + deltas.x * ticksDelta * f;
-                ny = coordsZero.usrCoords[2] + deltas.y * ticksDelta * f;
-                distScr = coordsZero.distance(Const.COORDS_BY_SCREEN, new Coords(Const.COORDS_BY_USER, [nx, ny], this.board));
-            }
-
-            return f;
+            return ticksDelta;
         },
-
 
         /**
          * Auxiliary method used by {@link JXG.Ticks#generateEquidistantTicks} to create a tick
@@ -607,12 +632,10 @@ define([
                 if (ti.length === 3 && this.fixedTicks[i] >= bounds.lower && this.fixedTicks[i] <= bounds.upper) {
                     this.ticks.push(ti);
 
-                    if (this.visProp.drawlabels && (!hasLabelOverrides || Type.exists(this.visProp.labels[i]))) {
+                    if (this.visProp.drawlabels && (hasLabelOverrides || Type.exists(this.visProp.labels[i]))) {
                         labelText = hasLabelOverrides ? this.visProp.labels[i] : this.fixedTicks[i];
                         this.labels.push(
-                            this.generateLabel(
-                                this.generateLabelText(tickCoords, coordsZero, labelText), tickCoords, i
-                            )
+                            this.generateLabel(this.generateLabelText(tickCoords, coordsZero, labelText), tickCoords, i)
                         );
                     } else {
                         this.labels.push(null);
@@ -622,7 +645,7 @@ define([
         },
 
         /**
-         * Calculates the x and y distance between two major ticks
+         * Calculates the x and y distance in pixel between two units in user space.
          *
          * @return {Object}
          * @private
@@ -720,8 +743,8 @@ define([
         /**
          * Creates the label text for a given tick. A value for the text can be provided as a number or string
          *
-         * @param  {JXG.Coords}    tick  The Coords of the tick to create a label for
-         * @param  {JXG.Coords}    zero  The Coords of line's zero
+         * @param  {JXG.Coords}    tick  The Coords-object of the tick to create a label for
+         * @param  {JXG.Coords}    zero  The Coords-object of line's zero
          * @param  {Number|String} value A predefined value for this tick
          * @return {String}
          * @private
@@ -939,8 +962,12 @@ define([
             throw new Error("JSXGraph: Can't create Ticks with parent types '" + (typeof parents[0]) + "'.");
         }
 
+        // deprecated
         if (typeof attr.generatelabelvalue === 'function') {
-            el.generateLabelValue = attr.generatelabelvalue;
+            el.generateLabelText = attr.generatelabelvalue;
+        }
+        if (typeof attr.generatelabeltext === 'function') {
+            el.generateLabelText = attr.generatelabeltext;
         }
 
         el.isDraggable = true;

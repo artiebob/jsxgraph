@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2014
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -172,7 +172,7 @@ define([
         },
 
         /**
-         * Calculates a point on the bisection line between the three points A, B, C. 
+         * Calculates a point on the bisection line between the three points A, B, C.
          * As a result, the bisection line is defined by two points:
          * Parameter B and the point with the coordinates calculated in this function.
          * Does not work for ideal points.
@@ -192,13 +192,13 @@ define([
             if (!Type.exists(board)) {
                 board = A.board;
             }
-            
+
             // Parallel lines
             if (Bc[0] === 0) {
-                return new Coords(Const.COORDS_BY_USER, 
+                return new Coords(Const.COORDS_BY_USER,
                     [1, (Ac[1] + Cc[1]) * 0.5, (Ac[2] + Cc[2]) * 0.5], board);
             }
-            
+
             // Non-parallel lines
             x = Ac[1] - Bc[1];
             y = Ac[2] - Bc[2];
@@ -207,7 +207,7 @@ define([
             x = Cc[1] - Bc[1];
             y = Cc[2] - Bc[2];
             phiC =  Math.atan2(y, x);
-            
+
             phi = (phiA + phiC) * 0.5;
 
             if (phiA > phiC) {
@@ -289,7 +289,7 @@ define([
          * @param {JXG.Line} line A line.
          * @param {JXG.Point} point Point which is projected to the line.
          * @param {JXG.Board} [board=point.board] Reference to the board
-         * @returns {Array} Array of length two containing coordinates of a point on the perpendicular to the given line 
+         * @returns {Array} Array of length two containing coordinates of a point on the perpendicular to the given line
          *                  through the given point and boolean flag "change".
          */
         perpendicular: function (line, point, board) {
@@ -357,7 +357,7 @@ define([
                 change = true;
             }
 
-            return [new Coords(Type.COORDS_BY_USER, c, board), change];
+            return [new Coords(Const.COORDS_BY_USER, c, board), change];
         },
 
         /**
@@ -930,6 +930,96 @@ define([
         /****************************************/
 
         /**
+         * Generate the function which computes the coordinates of the intersection point. 
+         * Primarily used in {@link JXG.Point#createIntersectionPoint}.
+         * @param {JXG.Board} board object
+         * @param {JXG.Line,JXG.Circle_JXG.Line,JXG.Circle_Number} el1,el2,i The result will be a intersection point on el1 and el2. 
+         * i determines the intersection point if two points are available: <ul>
+         *   <li>i==0: use the positive square root,</li>
+         *   <li>i==1: use the negative square root.</li></ul>
+         * See further {@see JXG.Point#createIntersectionPoint}.
+         * @param {Boolean} alwaysintersect. Flag that determines if segements and arc can have an outer intersection point 
+         * on their defining line or circle.
+         * @returns {Function} Function returning a {@see JXG.Coords} object that determines the intersection point.
+         */
+        intersectionFunction: function (board, el1, el2, i, j, alwaysintersect) {
+            var func, that = this;
+
+            if (el1.elementClass === Const.OBJECT_CLASS_CURVE &&
+                    el2.elementClass === Const.OBJECT_CLASS_CURVE) {
+                // curve - curve
+                /** @ignore */
+                func = function () {
+                    return that.meetCurveCurve(el1, el2, i, j, el1.board);
+                };
+
+            //} else if ((el1.type === Const.OBJECT_TYPE_ARC && el2.elementClass === Const.OBJECT_CLASS_LINE) ||
+//  //                (el2.type === Const.OBJECT_TYPE_ARC && el1.elementClass === Const.OBJECT_CLASS_LINE)) {
+                // arc - line   (arcs are of class curve, but are intersected like circles)
+                // TEMPORARY FIX!!!
+                /** @ignore */
+//  //            func = function () {
+                    //return that..meet(el1.stdform, el2.stdform, i, el1.board);
+                //};
+
+            } else if ((el1.elementClass === Const.OBJECT_CLASS_CURVE && el2.elementClass === Const.OBJECT_CLASS_LINE) ||
+                    (el2.elementClass === Const.OBJECT_CLASS_CURVE && el1.elementClass === Const.OBJECT_CLASS_LINE)) {
+                // curve - line (this includes intersections between conic sections and lines
+                /** @ignore */
+                func = function () {
+                    return that.meetCurveLine(el1, el2, i, el1.board, alwaysintersect);
+                };
+
+            } else if (el1.elementClass === Const.OBJECT_CLASS_LINE && el2.elementClass === Const.OBJECT_CLASS_LINE) {
+                // line - line, lines may also be segments.
+                /** @ignore */
+                func = function () {
+                    var res, c,
+                        first1 = el1.visProp.straightfirst,
+                        first2 = el2.visProp.straightfirst,
+                        last1 = el1.visProp.straightlast,
+                        last2 = el2.visProp.straightlast;
+
+                    /**
+                     * If one of the lines is a segment or ray and
+                     * the the intersection point shpould disappear if outside
+                     * of the segment or ray we call
+                     * meetSegmentSegment
+                     */
+                    if (!alwaysintersect && (!first1 || !last1 || !first2 || !last2)) {
+                        res = that.meetSegmentSegment(
+                            el1.point1.coords.usrCoords,
+                            el1.point2.coords.usrCoords,
+                            el2.point1.coords.usrCoords,
+                            el2.point2.coords.usrCoords,
+                            el1.board
+                        );
+
+                        if ((!first1 && res[1] < 0) || (!last1 && res[1] > 1) ||
+                                (!first2 && res[2] < 0) || (!last2 && res[2] > 1)) {
+                            // Non-existent
+                            c = [0, NaN, NaN];
+                        } else {
+                            c = res[0];
+                        }
+
+                        return (new Coords(Const.COORDS_BY_USER, c, el1.board));
+                    }
+
+                    return that.meet(el1.stdform, el2.stdform, i, el1.board);
+                };
+            } else {
+                // All other combinations of circles and lines
+                /** @ignore */
+                func = function () {
+                    return that.meet(el1.stdform, el2.stdform, i, el1.board);
+                };
+            }
+
+            return func;
+        },
+
+        /**
          * Computes the intersection of a pair of lines, circles or both.
          * It uses the internal data array stdform of these elements.
          * @param {Array} el1 stdform of the first element (line or circle)
@@ -1050,6 +1140,7 @@ define([
          * @returns {JXG.Coords} Coordinates of the intersection point.
          */
         meetLineLine: function (l1, l2, i, board) {
+            /*
             var s = Mat.crossProduct(l1, l2);
 
             if (Math.abs(s[0]) > Mat.eps) {
@@ -1057,6 +1148,8 @@ define([
                 s[2] /= s[0];
                 s[0] = 1.0;
             }
+            */
+            var s = isNaN(l1[5] + l2[5]) ? [0, 0, 0] : Mat.crossProduct(l1, l2);
             return new Coords(Const.COORDS_BY_USER, s, board);
         },
 
@@ -1191,7 +1284,7 @@ define([
          * @param {JXG.Curve,JXG.Line} el2 Curve or Line
          * @param {Number} nr the nr-th intersection point will be returned.
          * @param {JXG.Board} [board=el1.board] Reference to a board object.
-         * @param {Boolean} alwaysIntersect If false just the segment between the two defining points are tested for intersection 
+         * @param {Boolean} alwaysIntersect If false just the segment between the two defining points are tested for intersection
          * @returns {JXG.Coords} Intersection point. In case no intersection point is detected,
          * the ideal point [0,1,0] is returned.
          */
@@ -1222,9 +1315,9 @@ define([
         /**
          * Intersection of line and curve, continuous case.
          * Finds the nr-the intersection point
-         * Uses {@link JXG.Math.Geometry#meetCurveLineDiscrete} as a first approximation. 
+         * Uses {@link JXG.Math.Geometry#meetCurveLineDiscrete} as a first approximation.
          * A more exact solution is then found with {@link JXG.Math.Numerics#meetCurveLineDiscrete}.
-         * 
+         *
          * @param {JXG.Curve} cu Curve
          * @param {JXG.Line} li Line
          * @param {Number} nr Will return the nr-th intersection point.
@@ -1238,11 +1331,11 @@ define([
             v = this.meetCurveLineDiscrete(cu, li, nr, board, testSegment);
             x = v.usrCoords[1];
             y = v.usrCoords[2];
-            
+
             func0 = function (t) {
                 var c1 = x - cu.X(t),
                     c2 = y - cu.Y(t);
-                    
+
                 return Math.sqrt(c1 * c1 + c2 * c2);
             };
 
@@ -1250,7 +1343,7 @@ define([
                 var v = li.stdform[0] + li.stdform[1] * cu.X(t) + li.stdform[2] * cu.Y(t);
                 return v * v;
             };
-            
+
             // Find t
             t = Numerics.root(func0, [cu.minX(), cu.maxX()]);
             // Compute "exect" t
@@ -1270,7 +1363,7 @@ define([
          * Intersection of line and curve, continuous case.
          * Segments are treated as lines. Finding the nr-the intersection point
          * works for nr=0,1 only.
-         * 
+         *
          * @private
          * @deprecated
          * @param {JXG.Curve} cu Curve
@@ -1349,21 +1442,29 @@ define([
          * @param {JXG.Line} li
          * @param {Number} nr
          * @param {JXG.Board} board
-         * @param {Boolean} testSegment Test if intersection has to be inside of the segment or somewhere on the 
+         * @param {Boolean} testSegment Test if intersection has to be inside of the segment or somewhere on the
          * line defined by the segment
-         * 
+         *
          * @returns {JXG.Coords} Intersection point. In case no intersection point is detected,
          * the ideal point [0,1,0] is returned.
          */
         meetCurveLineDiscrete: function (cu, li, nr, board, testSegment) {
             var i, j,
                 p1, p2, p, q,
+                lip1 = li.point1.coords.usrCoords,
+                lip2 = li.point2.coords.usrCoords,
                 d, res,
                 cnt = 0,
                 len = cu.numberPoints;
 
             // In case, no intersection will be found we will take this
             q = new Coords(Const.COORDS_BY_USER, [0, NaN, NaN], board);
+
+            if (lip1[0] === 0.0) {
+                lip1 = [1, lip2[1] + li.stdform[2], lip2[2] - li.stdform[1]];
+            } else if (lip2[0] === 0.0) {
+                lip2 = [1, lip1[1] + li.stdform[2], lip1[2] - li.stdform[1]];
+            }
 
             p2 = cu.points[0].usrCoords;
             for (i = 1; i < len; i++) {
@@ -1380,13 +1481,13 @@ define([
                             cu.points[i + 1].usrCoords.slice(1),
                             cu.points[i + 2].usrCoords.slice(1)
                         ], [
-                            li.point1.coords.usrCoords.slice(1),
-                            li.point2.coords.usrCoords.slice(1)
+                            lip1.slice(1),
+                            lip2.slice(1)
                         ], testSegment);
 
                         i += 2;
                     } else {
-                        res = [this.meetSegmentSegment(p1, p2, li.point1.coords.usrCoords, li.point2.coords.usrCoords)];
+                        res = [this.meetSegmentSegment(p1, p2, lip1, lip2)];
                     }
 
                     for (j = 0; j < res.length; j++) {
@@ -1574,7 +1675,7 @@ define([
                 len = Lnew.length,
                 le = L.length;
 
-            if (le > 0 &&
+            if (le > 0 && len > 0 &&
                     ((L[le - 1][1] === 1 && Lnew[0][1] === 0) ||
                     (t2exists && L[le - 1][2] === 1 && Lnew[0][2] === 0))) {
                 start = 1;
@@ -1964,8 +2065,8 @@ define([
             }
 
             v = Mat.crossProduct(v, point.coords.usrCoords);
-
-            return this.meetLineLine(v, line.stdform, 0, board);
+            //return this.meetLineLine(v, line.stdform, 0, board);
+            return new Coords(Const.COORDS_BY_USER, Mat.crossProduct(v, line.stdform), board);
         },
 
         /**
@@ -2130,8 +2231,6 @@ define([
 
                 newCoordsObj = new Coords(Const.COORDS_BY_USER, newCoords, board);
             } else {   // 'parameter', 'polar', 'functiongraph'
-
-                // Function to minimize
                 minfunc = function (t) {
                     var dx = x - curve.X(t),
                         dy = y - curve.Y(t);
@@ -2170,6 +2269,37 @@ define([
             }
 
             return [curve.updateTransform(newCoordsObj), t];
+        },
+
+        /**
+         * Calculates the coordinates of the closest orthogonal projection of a given coordinate array onto the
+         * border of a polygon.
+         * @param {Array} p Point to project.
+         * @param {JXG.Polygon} pol Polygon element
+         * @returns {Array} The coordinates of the closest projection of the given point to the border of the polygon.
+         */
+        projectCoordsToPolygon: function (p, pol) {
+            var i,
+                len = pol.vertices.length,
+                d_best = Infinity,
+                d,
+                projection,
+                bestprojection;
+
+            for (i = 0; i < len; i++) {
+                projection = JXG.Math.Geometry.projectCoordsToSegment(
+                    p,
+                    pol.vertices[i].coords.usrCoords,
+                    pol.vertices[(i + 1) % len].coords.usrCoords
+                );
+
+                d = JXG.Math.Geometry.distance(projection[0], p, 3);
+                if (0 <= projection[1] && projection[1] <= 1 && d < d_best) {
+                    bestprojection = projection[0].slice(0);
+                    d_best = d;
+                }
+            }
+            return bestprojection;
         },
 
         /**
@@ -2258,7 +2388,7 @@ define([
                     l = Mat.normalize(l);
 
                     // project point
-                    coords = this.projectPointToLine({coords: coords, board: brd}, {stdform: l});
+                    coords = this.projectPointToLine({coords: coords}, {stdform: l}, brd);
                 }
             }
 

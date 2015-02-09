@@ -43,7 +43,7 @@ define(['jxg'], function (JXG) {
 
     var major = 0,
         minor = 99,
-        patch = 1,
+        patch = 3,
         add = false, // 'dev',
         version = major + '.' + minor + '.' + patch + (add ? '-' + add : ''),
         constants;
@@ -95,6 +95,9 @@ define(['jxg'], function (JXG) {
         OBJECT_TYPE_GRID: 24,
         OBJECT_TYPE_TANGENT: 25,
         OBJECT_TYPE_HTMLSLIDER: 26,
+        OBJECT_TYPE_CHECKBOX: 27,
+        OBJECT_TYPE_INPUT: 28,
+        OBJECT_TYPE_BUTTON: 29,
 
         // object classes
         OBJECT_CLASS_POINT: 1,
@@ -103,6 +106,7 @@ define(['jxg'], function (JXG) {
         OBJECT_CLASS_CURVE: 4,
         OBJECT_CLASS_AREA: 5,
         OBJECT_CLASS_OTHER: 6,
+        OBJECT_CLASS_TEXT: 7,
 
         // SketchReader constants
         GENTYPE_ABC: 1, // unused
@@ -138,7 +142,8 @@ define(['jxg'], function (JXG) {
         GENTYPE_RULER: 31,
         GENTYPE_SLOPETRIANGLE: 32,
         GENTYPE_PERPSEGMENT: 33,
-        // 34 ... 39 // unused ...
+        GENTYPE_LABELMOVEMENT: 34,
+        // 35 ... 39 // unused ...
         GENTYPE_DELETE: 41,
         GENTYPE_COPY: 42,
         GENTYPE_MIRROR: 43,
@@ -181,7 +186,10 @@ define(['jxg'], function (JXG) {
         GENTYPE_CTX_INTVAL: 75,
         GENTYPE_CTX_POINT1: 76,
         GENTYPE_CTX_POINT2: 77,
-        GENTYPE_CTX_LABELSTICKY: 78
+        GENTYPE_CTX_LABELSTICKY: 78,
+        GENTYPE_CTX_TYPE_I: 79,
+        GENTYPE_CTX_HASINNERPOINTS: 80,
+        GENTYPE_CTX_SNAPWIDTH: 81
     };
 
     JXG.extend(JXG, constants);

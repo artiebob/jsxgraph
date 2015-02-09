@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2013
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -65,6 +65,8 @@ define([
         // docstring in AbstractRenderer
         this.type = 'svg';
 
+        this.isIE = navigator.appVersion.indexOf("MSIE") !== -1 || navigator.userAgent.match(/Trident\//);
+
         /**
          * SVG root node
          * @type Node
@@ -121,6 +123,13 @@ define([
          */
         this.filter = this.container.ownerDocument.createElementNS(this.svgNamespace, 'filter');
         this.filter.setAttributeNS(null, 'id', this.container.id + '_' + 'f1');
+        /*
+        this.filter.setAttributeNS(null, 'x', '-100%');
+        this.filter.setAttributeNS(null, 'y', '-100%');
+        this.filter.setAttributeNS(null, 'width', '400%');
+        this.filter.setAttributeNS(null, 'height', '400%');
+        //this.filter.setAttributeNS(null, 'filterUnits', 'userSpaceOnUse');
+        */
         this.filter.setAttributeNS(null, 'width', '300%');
         this.filter.setAttributeNS(null, 'height', '300%');
         this.filter.setAttributeNS(null, 'filterUnits', 'userSpaceOnUse');
@@ -243,7 +252,7 @@ define([
          * @param {Number} opacity
          * @param {Number} width
          */
-        _setArrowAtts: function (node, color, opacity, width) {
+        _setArrowAtts: function (node, color, opacity, width, parentNode) {
             var s, d;
 
             if (node) {
@@ -263,6 +272,10 @@ define([
 
                 node.setAttributeNS(null, 'markerHeight', d);
                 node.setAttributeNS(null, 'markerWidth', d);
+
+                if (this.isIE) {
+                    parentNode.parentNode.insertBefore(parentNode, parentNode);
+                }
             }
 
         },
@@ -331,6 +344,10 @@ define([
 
             node.setAttributeNS(null, "class", el.visProp.cssclass);
             //node.setAttributeNS(null, "style", "alignment-baseline:middle"); // Not yet supported by Firefox
+
+            // Preserve spaces 
+            node.setAttributeNS("http://www.w3.org/XML/1998/namespace", "space", "preserve");
+
             el.rendNodeText = this.container.ownerDocument.createTextNode('');
             node.appendChild(el.rendNodeText);
             this.appendChildPrim(node,  el.visProp.layer);
@@ -461,7 +478,7 @@ define([
             node.setAttributeNS(null, 'id', this.container.id + '_' + id);
             node.style.position = 'absolute';
             if (type === 'path') {
-                node.setAttributeNS(null, 'stroke-linecap', 'butt');
+                node.setAttributeNS(null, 'stroke-linecap', 'round');
                 node.setAttributeNS(null, 'stroke-linejoin', 'round');
             }
             return node;
@@ -479,6 +496,9 @@ define([
             var node2;
 
             if (el.visPropOld.firstarrow === el.visProp.firstarrow && el.visPropOld.lastarrow === el.visProp.lastarrow) {
+                if (this.isIE && el.visProp.visible && (el.visProp.firstarrow || el.visProp.lastarrow)) {
+                    el.rendNode.parentNode.insertBefore(el.rendNode, el.rendNode);
+                }
                 return;
             }
 
@@ -614,8 +634,8 @@ define([
                 symbc = ' C ',
                 nextSymb = symbm,
                 maxSize = 5000.0,
-                pStr = '',
-                isNotPlot = (el.visProp.curvetype !== 'plot');
+                pStr = '';
+                // isNotPlot = (el.visProp.curvetype !== 'plot');
 
             if (el.numberPoints <= 0) {
                 return '';
@@ -624,9 +644,12 @@ define([
             len = Math.min(el.points.length, el.numberPoints);
 
             if (el.bezierDegree === 1) {
-                if (isNotPlot && el.board.options.curve.RDPsmoothing) {
-                    el.points = Numerics.RamerDouglasPeuker(el.points, 0.5);
+                /*
+                if (isNotPlot && el.visProp.rdpsmoothing) {
+                    el.points = Numerics.RamerDouglasPeucker(el.points, 0.5);
+                    el.numberPoints = el.points.length;
                 }
+                */
 
                 for (i = 0; i < len; i++) {
                     scr = el.points[i].scrCoords;
@@ -683,7 +706,7 @@ define([
             }
 
             if (isNoPlot && el.board.options.curve.RDPsmoothing) {
-                el.points = Numerics.RamerDouglasPeuker(el.points, 0.5);
+                el.points = Numerics.RamerDouglasPeucker(el.points, 0.5);
             }
 
             len = Math.min(el.points.length, el.numberPoints);
@@ -773,7 +796,6 @@ define([
         show: function (el) {
             var node;
 
-//console.log((typeof el.rendNode) + ' ' + (typeof el.rendNode.style));
             if (el && el.rendNode) {
                 node = el.rendNode;
                 node.setAttributeNS(null, 'display', 'inline');
@@ -925,6 +947,7 @@ define([
 
                 if (el.type === JXG.OBJECT_TYPE_IMAGE) {
                     node.setAttributeNS(null, 'opacity', oo);
+                    //node.style['opacity'] = oo;  // This would overwrite values set y CSS class.
                 } else {
                     node.setAttributeNS(null, 'fill-opacity', oo);
                 }
@@ -961,7 +984,7 @@ define([
 
                 node = el.rendNode;
 
-                if (el.type === Const.OBJECT_TYPE_TEXT) {
+                if (el.elementClass === Const.OBJECT_CLASS_TEXT) {
                     if (el.visProp.display === 'html') {
                         node.style.color = c;
                         node.style.opacity = oo;
@@ -975,14 +998,14 @@ define([
                 }
 
                 if (el.type === Const.OBJECT_TYPE_ARROW) {
-                    this._setArrowAtts(el.rendNodeTriangle, c, oo, el.visProp.strokewidth);
+                    this._setArrowAtts(el.rendNodeTriangle, c, oo, el.visProp.strokewidth, el.rendNode);
                 } else if (el.elementClass === Const.OBJECT_CLASS_CURVE || el.elementClass === Const.OBJECT_CLASS_LINE) {
                     if (el.visProp.firstarrow) {
-                        this._setArrowAtts(el.rendNodeTriangleStart, c, oo, el.visProp.strokewidth);
+                        this._setArrowAtts(el.rendNodeTriangleStart, c, oo, el.visProp.strokewidth, el.rendNode);
                     }
 
                     if (el.visProp.lastarrow) {
-                        this._setArrowAtts(el.rendNodeTriangleEnd, c, oo, el.visProp.strokewidth);
+                        this._setArrowAtts(el.rendNodeTriangleEnd, c, oo, el.visProp.strokewidth, el.rendNode);
                     }
                 }
             }
@@ -1006,14 +1029,14 @@ define([
                 this.setPropertyPrim(node, 'stroke-width', w + 'px');
 
                 if (el.type === Const.OBJECT_TYPE_ARROW) {
-                    this._setArrowAtts(el.rendNodeTriangle, el.visProp.strokecolor, el.visProp.strokeopacity, w);
+                    this._setArrowAtts(el.rendNodeTriangle, el.visProp.strokecolor, el.visProp.strokeopacity, w, el.rendNode);
                 } else if (el.elementClass === Const.OBJECT_CLASS_CURVE || el.elementClass === Const.OBJECT_CLASS_LINE) {
                     if (el.visProp.firstarrow) {
-                        this._setArrowAtts(el.rendNodeTriangleStart, el.visProp.strokecolor, el.visProp.strokeopacity, w);
+                        this._setArrowAtts(el.rendNodeTriangleStart, el.visProp.strokecolor, el.visProp.strokeopacity, w, el.rendNode);
                     }
 
                     if (el.visProp.lastarrow) {
-                        this._setArrowAtts(el.rendNodeTriangleEnd, el.visProp.strokecolor, el.visProp.strokeopacity, w);
+                        this._setArrowAtts(el.rendNodeTriangleEnd, el.visProp.strokecolor, el.visProp.strokeopacity, w, el.rendNode);
                     }
                 }
             }

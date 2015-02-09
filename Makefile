@@ -30,6 +30,7 @@ JSDOC2TPLSTAT=$(JSDOC2TPL)/static
 # flags
 MKDIRFLAGS=-p
 RMFLAGS=-rf
+#JSDOC2FLAGS=-v -t=$(JSDOC2TPL) -d=$(TMP)/docs
 JSDOC2FLAGS=-v -p -t=$(JSDOC2TPL) -d=$(TMP)/docs
 ZIPFLAGS=-r
 JSTESTPORT=4224
@@ -91,7 +92,7 @@ docs: core core-min
 	$(CP) $(JSDOC2PLG)/*.js ./node_modules/jsdoc2/app/plugins/
 
 	# run node-jsdoc2
-	$(JSDOC2) $(JSDOC2FLAGS) src/$(FILELIST).js
+	$(JSDOC2) $(JSDOC2FLAGS) src/loadjsxgraph.js src/$(FILELIST).js
 
 	# zip -r tmp/docs.zip tmp/docs/
 	$(CD) $(TMP) && $(ZIP) $(ZIPFLAGS) docs.zip docs/

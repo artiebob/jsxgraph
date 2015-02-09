@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2014
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -49,87 +49,51 @@
  */
 
 define([
-    'jxg', 'base/constants', 'base/coords', 'base/element', 'parser/geonext', 'math/statistics', 'utils/env', 'utils/type'
-], function (JXG, Const, Coords, GeometryElement, GeonextParser, Statistics, Env, Type) {
+    'jxg', 'base/constants', 'base/coords', 'base/element', 'parser/geonext', 'math/statistics',
+    'utils/env', 'utils/type', 'math/math', 'base/coordselement'
+], function (JXG, Const, Coords, GeometryElement, GeonextParser, Statistics, Env, Type, Mat, CoordsElement) {
 
     "use strict";
 
+    var priv = {
+            HTMLSliderInputEventHandler: function () {
+                this._val = parseFloat(this.rendNodeRange.value);
+                this.rendNodeOut.value = this.rendNodeRange.value;
+                this.board.update();
+            }
+        };
+
     /**
      * Construct and handle texts.
-     * @class Text: On creation the GEONExT syntax
-     * of <value>-terms
-     * are converted into JavaScript syntax.
-     * The coordinates can be relative to the coordinates of an element "element".
-     * @constructor
-     * @return A new geometry element Text
+     * 
+     * The coordinates can be relative to the coordinates of an element 
+     * given in {@link JXG.Options#text.anchor}.
+     * 
+     * MathJax, HTML and GEONExT syntax can be handled.
+     * @class Creates a new text object. Do not use this constructor to create a text. Use {@link JXG.Board#create} with
+     * type {@link Text} instead.
+     * @augments JXG.GeometryElement
+     * @augments JXG.CoordsElement
+     * @param {string|JXG.Board} board The board the new text is drawn on.
+     * @param {Array} coordinates An array with the user coordinates of the text.
+     * @param {Object} attributes An object containing visual properties and optional a name and a id.
+     * @param {string|function} content A string or a function returning a string.
+     *
      */
-    JXG.Text = function (board, content, coords, attributes) {
-        this.constructor(board, attributes, Const.OBJECT_TYPE_TEXT, Const.OBJECT_CLASS_OTHER);
+    JXG.Text = function (board, coords, attributes, content) {
+        this.constructor(board, attributes, Const.OBJECT_TYPE_TEXT, Const.OBJECT_CLASS_TEXT);
 
-        var i, anchor;
+        this.element = this.board.select(attributes.anchor);
+        this.coordsConstructor(coords, this.visProp.islabel);
 
         this.content = '';
         this.plaintext = '';
         this.plaintextOld = null;
+        this.orgText = '';
 
-        this.isDraggable = false;
         this.needsSizeUpdate = false;
-
-        this.element = this.board.select(attributes.anchor);
-
         this.hiddenByParent = false;
 
-        if (this.element) {
-            if (this.visProp.islabel) {
-                this.relativeCoords = new Coords(Const.COORDS_BY_SCREEN, [parseFloat(coords[0]), parseFloat(coords[1])], this.board);
-            } else {
-                this.relativeCoords = new Coords(Const.COORDS_BY_USER, [parseFloat(coords[0]), parseFloat(coords[1])], this.board);
-            }
-            this.element.addChild(this);
-
-            this.X = function () {
-                var sx, coords, anchor;
-
-                if (this.visProp.islabel) {
-                    sx =  parseFloat(this.visProp.offset[0]);
-                    anchor = this.element.getLabelAnchor();
-                    coords = new Coords(Const.COORDS_BY_SCREEN, [sx + this.relativeCoords.scrCoords[1] + anchor.scrCoords[1], 0], this.board);
-
-                    return coords.usrCoords[1];
-                }
-
-                anchor = this.element.getTextAnchor();
-                return this.relativeCoords.usrCoords[1] + anchor.usrCoords[1];
-            };
-
-            this.Y = function () {
-                var sy, coords, anchor;
-
-                if (this.visProp.islabel) {
-                    sy = -parseFloat(this.visProp.offset[1]);
-                    anchor = this.element.getLabelAnchor();
-                    coords = new Coords(Const.COORDS_BY_SCREEN, [0, sy + this.relativeCoords.scrCoords[2] + anchor.scrCoords[2]], this.board);
-
-                    return coords.usrCoords[2];
-                }
-
-                anchor = this.element.getTextAnchor();
-                return this.relativeCoords.usrCoords[2] + anchor.usrCoords[2];
-            };
-
-            this.coords = new Coords(Const.COORDS_BY_SCREEN, [0, 0], this.board);
-            this.isDraggable = true;
-        } else {
-            if (Type.isNumber(coords[0]) && Type.isNumber(coords[1])) {
-                this.isDraggable = true;
-            }
-            this.X = Type.createFunction(coords[0], this.board, null, true);
-            this.Y = Type.createFunction(coords[1], this.board, null, true);
-
-            this.coords = new Coords(Const.COORDS_BY_USER, [this.X(), this.Y()], this.board);
-        }
-
-        this.Z = Type.createFunction(1, this.board, '');
         this.size = [1.0, 1.0];
         this.id = this.board.setId(this, 'T');
 
@@ -138,27 +102,22 @@ define([
         this.updateText();
 
         this.board.renderer.drawText(this);
-
-        if (!this.visProp.visible) {
-            this.board.renderer.hide(this);
-        }
+        this.board.finalizeAdding(this);
 
         if (typeof this.content === 'string') {
             this.notifyParents(this.content);
         }
-
         this.elType = 'text';
 
         this.methodMap = Type.deepCopy(this.methodMap, {
             setText: 'setTextJessieCode',
-            free: 'free',
+            // free: 'free',
             move: 'setCoords'
         });
-
-        return this;
     };
 
     JXG.Text.prototype = new GeometryElement();
+    Type.copyPrototypeMethods(JXG.Text, CoordsElement, 'coordsConstructor');
 
     JXG.extend(JXG.Text.prototype, /** @lends JXG.Text.prototype */ {
         /**
@@ -166,6 +125,8 @@ define([
          * Test if the the screen coordinates (x,y) are in a small stripe
          * at the left side or at the right side of the text.
          * Sensitivity is set in this.board.options.precision.hasPoint.
+         * If dragarea is set to 'all' (default), tests if the the screen 
+        * coordinates (x,y) are in within the text boundary.
          * @param {Number} x
          * @param {Number} y
          * @return {Boolean}
@@ -173,6 +134,16 @@ define([
         hasPoint: function (x, y) {
             var lft, rt, top, bot,
                 r = this.board.options.precision.hasPoint;
+
+            if (this.transformations.length > 0) {
+                /**
+                 * Transform the mouse/touch coordinates
+                 * back to the original position of the text.
+                 */
+                lft = Mat.matVecMult(Mat.inverse(this.board.renderer.joinTransforms(this, this.transformations)), [1, x, y]);
+                x = lft[1];
+                y = lft[2];
+            }
 
             if (this.visProp.anchorx === 'right') {
                 lft = this.coords.scrCoords[1] - this.size[0];
@@ -210,9 +181,14 @@ define([
         _setUpdateText: function (text) {
             var updateText;
 
+            this.orgText = text;
             if (typeof text === 'function') {
                 this.updateText = function () {
-                    this.plaintext = this.convertGeonext2CSS(text());
+                    if (this.visProp.parse && !this.visProp.usemathjax) {
+                        this.plaintext = this.replaceSub(this.replaceSup(this.convertGeonext2CSS(text())));
+                    } else {
+                        this.plaintext = text();
+                    }
                 };
             } else if (Type.isString(text) && !this.visProp.parse) {
                 this.updateText = function () {
@@ -225,6 +201,8 @@ define([
                     if (this.visProp.useasciimathml) {
                         // Convert via ASCIIMathML
                         this.content = "'`" + text + "`'";
+                    } else if (this.visProp.usemathjax) {
+                        this.content = "'" + text + "'";
                     } else {
                         // Converts GEONExT syntax into JavaScript string
                         this.content = this.generateTerm(text);
@@ -252,7 +230,7 @@ define([
             this.updateText();
             this.prepareUpdate().update().updateRenderer();
 
-            // We do not call updateSize for the infobox to speed up rendering            
+            // We do not call updateSize for the infobox to speed up rendering
             if (!this.board.infobox || this.id !== this.board.infobox.id) {
                 this.updateSize();    // updateSize() is called at least once.
             }
@@ -445,20 +423,30 @@ define([
          * @return {object} reference to the text object.
          */
         setCoords: function (x, y) {
+            var coordsAnchor, dx, dy;
             if (Type.isArray(x) && x.length > 1) {
                 y = x[1];
                 x = x[0];
             }
 
-            this.X = function () {
-                return x;
-            };
+            if (this.visProp.islabel && Type.exists(this.element)) {
+                coordsAnchor = this.element.getLabelAnchor();
+                dx = (x - coordsAnchor.usrCoords[1]) * this.board.unitX;
+                dy = -(y - coordsAnchor.usrCoords[2]) * this.board.unitY;
 
-            this.Y = function () {
-                return y;
-            };
+                this.relativeCoords.setCoordinates(Const.COORDS_BY_SCREEN, [dx, dy]);
+            } else {
+                /*
+                this.X = function () {
+                    return x;
+                };
 
-            this.coords.setCoordinates(Const.COORDS_BY_USER, [x, y]);
+                this.Y = function () {
+                    return y;
+                };
+                */
+                this.coords.setCoordinates(Const.COORDS_BY_USER, [x, y]);
+            }
 
             // this should be a local update, otherwise there might be problems
             // with the tick update routine resulting in orphaned tick labels
@@ -467,35 +455,26 @@ define([
             return this;
         },
 
-        free: function () {
-            this.X = Type.createFunction(this.X(), this.board, '');
-            this.Y = Type.createFunction(this.Y(), this.board, '');
-
-            this.isDraggable = true;
-        },
-
         /**
          * Evaluates the text.
          * Then, the update function of the renderer
          * is called.
          */
-        update: function () {
-            if (this.needsUpdate) {
-                if (!this.visProp.frozen) {
-                    this.updateCoords();
-                }
+        update: function (fromParent) {
+            if (!this.needsUpdate) {
+                return this;
+            }
 
-                this.updateText();
+            this.updateCoords(fromParent);
+            this.updateText();
 
-                if (this.visProp.display === 'internal') {
-                    this.plaintext = this.utf8_decode(this.plaintext);
-                }
+            if (this.visProp.display === 'internal') {
+                this.plaintext = this.utf8_decode(this.plaintext);
+            }
 
-                this.checkForSizeUpdate();
-                if (this.needsSizeUpdate) {
-                    this.updateSize();
-                }
-                this.updateTransform();
+            this.checkForSizeUpdate();
+            if (this.needsSizeUpdate) {
+                this.updateSize();
             }
 
             return this;
@@ -503,11 +482,11 @@ define([
 
         /**
          * Used to save updateSize() calls.
-         * Called in JXG.Text.update 
+         * Called in JXG.Text.update
          * That means this.update() has been called.
          * More tests are in JXG.Renderer.updateTextStyle. The latter tests
          * are one update off. But this should pose not too many problems, since
-         * it affects fontSize and cssClass changes. 
+         * it affects fontSize and cssClass changes.
          *
          * @private
          */
@@ -527,37 +506,12 @@ define([
         },
 
         /**
-         * Updates the coordinates of the text element.
-         */
-        updateCoords: function () {
-            this.coords.setCoordinates(Const.COORDS_BY_USER, [this.X(), this.Y()]);
-        },
-
-        /**
          * The update function of the renderert
          * is called.
          * @private
          */
         updateRenderer: function () {
-            if (this.needsUpdate) {
-                this.board.renderer.updateText(this);
-                this.needsUpdate = false;
-            }
-            return this;
-        },
-
-        updateTransform: function () {
-            var i;
-
-            if (this.transformations.length === 0) {
-                return this;
-            }
-
-            for (i = 0; i < this.transformations.length; i++) {
-                this.transformations[i].update();
-            }
-
-            return this;
+            return this.updateRendererGeneric('updateText');
         },
 
         /**
@@ -627,7 +581,7 @@ define([
         },
 
         /**
-         * Converts the GEONExT tags <overline> and <arrow> to 
+         * Converts the GEONExT tags <overline> and <arrow> to
          * HTML span tags with proper CSS formating.
          * @private
          * @see JXG.Text.generateTerm @see JXG.Text._setText
@@ -679,76 +633,31 @@ define([
             var c = this.coords.usrCoords;
 
             return this.visProp.islabel ? [0, 0, 0, 0] : [c[1], c[2] + this.size[1], c[1] + this.size[0], c[2]];
-        },
-
-        /**
-         * Sets x and y coordinate of the text.
-         * @param {Number} method The type of coordinates used here. Possible values are {@link JXG.COORDS_BY_USER} and {@link JXG.COORDS_BY_SCREEN}.
-         * @param {Array} coords coordinates in screen/user units
-         * @param {Array} oldcoords previous coordinates in screen/user units
-         * @returns {JXG.Text} this element
-         */
-        setPositionDirectly: function (method, coords, oldcoords) {
-            var dc, v,
-                c = new Coords(method, coords, this.board),
-                oldc = new Coords(method, oldcoords, this.board);
-
-            if (this.relativeCoords) {
-                if (this.visProp.islabel) {
-                    dc = Statistics.subtract(c.scrCoords, oldc.scrCoords);
-                    this.relativeCoords.scrCoords[1] += dc[1];
-                    this.relativeCoords.scrCoords[2] += dc[2];
-                } else {
-                    dc = Statistics.subtract(c.usrCoords, oldc.usrCoords);
-                    this.relativeCoords.usrCoords[1] += dc[1];
-                    this.relativeCoords.usrCoords[2] += dc[2];
-                }
-            } else {
-                dc = Statistics.subtract(c.usrCoords, oldc.usrCoords);
-                v = [this.Z(), this.X(), this.Y()];
-                this.X = Type.createFunction(v[1] + dc[1], this.board, '');
-                this.Y = Type.createFunction(v[2] + dc[2], this.board, '');
-                
-                /*
-                * In case of snapToGrid===true, first the coordinates of 
-                * the new position is set, then they are rounded to the grid.
-                * The resulting coordinates are set as functions X(), Y(),
-                * becasue they are set again in updateCoords().
-                */
-                if (this.visProp.snaptogrid) {
-                    this.coords.setCoordinates(Const.COORDS_BY_USER, c.usrCoords);
-                    this.snapToGrid();
-                    this.X = Type.createFunction(this.coords.usrCoords[1], this.board, '');
-                    this.Y = Type.createFunction(this.coords.usrCoords[2], this.board, '');
-                }
-            }
-            
-            return this;
-        },
-        
-        /**
-         * Alias for {@link JXG.Element#handleSnapToGrid}
-         * @returns {JXG.Text} Reference to this element
-         */
-        snapToGrid: function () {
-            return this.handleSnapToGrid();
         }
-
     });
 
     /**
-     * @class This element is used to provide a constructor for text, which is just a wrapper for element {@link Text}.
+     * @class Construct and handle texts.
+     * 
+     * The coordinates can be relative to the coordinates of an element 
+     * given in {@link JXG.Options#text.anchor}.
+     * 
+     * MathJaX, HTML and GEONExT syntax can be handled.
      * @pseudo
      * @description
      * @name Text
-     * @augments JXG.GeometryElement
+     * @augments JXG.Text
      * @constructor
      * @type JXG.Text
      *
-     * @param {number,function_number,function_String,function} x,y,str Parent elements for text elements.
+     * @param {number,function_number,function_number,function_String,function} z_,x,y,str Parent elements for text elements.
      *                     <p>
-     *                     x and y are the coordinates of the lower left corner of the text box. The position of the text is fixed,
-     *                     x and y are numbers. The position is variable if x or y are functions.
+     *   Parent elements can be two or three elements of type number, a string containing a GEONE<sub>x</sub>T
+     *   constraint, or a function which takes no parameter and returns a number. Every parent element determines one coordinate. If a coordinate is
+     *   given by a number, the number determines the initial position of a free text. If given by a string or a function that coordinate will be constrained
+     *   that means the user won't be able to change the texts's position directly by mouse because it will be calculated automatically depending on the string
+     *   or the function's return value. If two parent elements are given the coordinates will be interpreted as 2D affine Euclidean coordinates, if three such
+     *   parent elements are given they will be interpreted as homogeneous coordinates.
      *                     <p>
      *                     The text to display may be given as string or as function returning a string.
      *
@@ -780,15 +689,18 @@ define([
      */
     JXG.createText = function (board, parents, attributes) {
         var t,
-            attr = Type.copyAttributes(attributes, board.options, 'text');
+            attr = Type.copyAttributes(attributes, board.options, 'text'),
+            coords = parents.slice(0, -1),
+            content = parents[parents.length - 1];
 
         // downwards compatibility
         attr.anchor = attr.parent || attr.anchor;
+        t = CoordsElement.create(JXG.Text, board, coords, attr, content);
 
-        t = new JXG.Text(board, parents[parents.length - 1], parents, attr);
-
-        if (typeof parents[parents.length - 1] !== 'function') {
-            t.parents = parents;
+        if (!t) {
+            throw new Error("JSXGraph: Can't create text with parent types '" +
+                    (typeof parents[0]) + "' and '" + (typeof parents[1]) + "'." +
+                    "\nPossible parent types: [x,y], [z,x,y], [element,transformation]");
         }
 
         if (Type.evaluate(attr.rotate) !== 0 && attr.display === 'internal') {
@@ -804,9 +716,8 @@ define([
      * [[x,y], [w px, h px], [range]
      */
     JXG.createHTMLSlider = function (board, parents, attributes) {
-        var t, 
-            attr = Type.copyAttributes(attributes, board.options, 'htmlslider'),
-            par;
+        var t, par,
+            attr = Type.copyAttributes(attributes, board.options, 'htmlslider');
 
         if (parents.length !== 2 || parents[0].length !== 2 || parents[1].length !== 3) {
             throw new Error("JSXGraph: Can't create htmlslider with parent types '" +
@@ -817,32 +728,32 @@ define([
         // backwards compatibility
         attr.anchor = attr.parent || attr.anchor;
         attr.fixed = attr.fixed || true;
-        
-        par = [parents[0][0], parents[0][1], 
-            '<form style="display:inline">' +        
+
+        par = [parents[0][0], parents[0][1],
+            '<form style="display:inline">' +
             '<input type="range" /><span></span><input type="text" />' +
             '</form>'];
-        
+
         t = JXG.createText(board, par, attr);
         t.type = Type.OBJECT_TYPE_HTMLSLIDER;
-        
+
         t.rendNodeForm = t.rendNode.childNodes[0];
         t.rendNodeForm.id = t.rendNode.id + '_form';
-        
+
         t.rendNodeRange = t.rendNodeForm.childNodes[0];
         t.rendNodeRange.id = t.rendNode.id + '_range';
         t.rendNodeRange.min = parents[1][0];
         t.rendNodeRange.max = parents[1][2];
         t.rendNodeRange.step = attr.step;
         t.rendNodeRange.value = parents[1][1];
-        
+
         t.rendNodeLabel = t.rendNodeForm.childNodes[1];
         t.rendNodeLabel.id = t.rendNode.id + '_label';
-        
+
         if (attr.withlabel) {
             t.rendNodeLabel.innerHTML = t.name + '=';
         }
-        
+
         t.rendNodeOut = t.rendNodeForm.childNodes[2];
         t.rendNodeOut.id = t.rendNode.id + '_out';
         t.rendNodeOut.value = parents[1][1];
@@ -852,44 +763,29 @@ define([
         t.rendNodeOut.style.width = attr.widthout + 'px';
 
         t._val = parents[1][1];
-        
+
         if (JXG.supportsVML()) {
             /*
             * OnChange event is used for IE browsers
             * The range element is supported since IE10
             */
-            Env.addEvent(t.rendNodeForm, 'change', function () {
-                this._val = 1.0 * this.rendNodeRange.value;
-                this.rendNodeOut.value = this.rendNodeRange.value;
-                this.board.update();
-            }, t);
+            Env.addEvent(t.rendNodeForm, 'change', priv.HTMLSliderInputEventHandler, t);
         } else {
             /*
             * OnInput event is used for non-IE browsers
             */
-            Env.addEvent(t.rendNodeForm, 'input', function () {
-                this._val = 1.0 * this.rendNodeRange.value;
-                this.rendNodeOut.value = this.rendNodeRange.value;
-                this.board.update();
-            }, t);
+            Env.addEvent(t.rendNodeForm, 'input', priv.HTMLSliderInputEventHandler, t);
         }
 
-        t.Value = function() {
+        t.Value = function () {
             return this._val;
         };
-        
-        /*
-        if (Type.evaluate(attr.rotate) !== 0 && attr.display === 'internal') {
-            t.addRotation(Type.evaluate(attr.rotate));
-        }
-        */
-        
+
         return t;
     };
 
     JXG.registerElement('htmlslider', JXG.createHTMLSlider);
 
-    
     return {
         Text: JXG.Text,
         createText: JXG.createText,

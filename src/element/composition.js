@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2013
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -113,11 +113,14 @@ define([
     JXG.createOrthogonalProjection = function (board, parents, attributes) {
         var l, p, t, attr;
 
-        if (Type.isPoint(parents[0]) && parents[1].elementClass === Const.OBJECT_CLASS_LINE) {
-            p = parents[0];
+        parents[0] = board.select(parents[0]);
+        parents[1] = board.select(parents[1]);
+
+        if (Type.isPointType(parents[0], board) && parents[1].elementClass === Const.OBJECT_CLASS_LINE) {
+            p = Type.providePoints(board, [parents[0]], attributes, 'point')[0];
             l = parents[1];
-        } else if (Type.isPoint(parents[1]) && parents[0].elementClass === Const.OBJECT_CLASS_LINE) {
-            p = parents[1];
+        } else if (Type.isPointType(parents[1], board) && parents[0].elementClass === Const.OBJECT_CLASS_LINE) {
+            p = Type.providePoints(board, [parents[1]], attributes, 'point')[0];
             l = parents[0];
         } else {
             throw new Error("JSXGraph: Can't create perpendicular point with parent types '" +
@@ -199,7 +202,6 @@ define([
         return t;
     };
 
-
     /**
 
      * @class This element is used to provide a constructor for a perpendicular.
@@ -238,12 +240,12 @@ define([
         parents[0] = board.select(parents[0]);
         parents[1] = board.select(parents[1]);
 
-        if (Type.isPoint(parents[0]) && parents[1].elementClass === Const.OBJECT_CLASS_LINE) {
+        if (Type.isPointType(parents[0], board) && parents[1].elementClass === Const.OBJECT_CLASS_LINE) {
             l = parents[1];
-            p = parents[0];
-        } else if (Type.isPoint(parents[1]) && parents[0].elementClass === Const.OBJECT_CLASS_LINE) {
+            p = Type.providePoints(board, [parents[0]], attributes, 'point')[0];
+        } else if (Type.isPointType(parents[1], board) && parents[0].elementClass === Const.OBJECT_CLASS_LINE) {
             l = parents[0];
-            p = parents[1];
+            p = Type.providePoints(board, [parents[1]], attributes, 'point')[0];
         } else {
             throw new Error("JSXGraph: Can't create perpendicular with parent types '" +
                 (typeof parents[0]) + "' and '" + (typeof parents[1]) + "'." +
@@ -301,11 +303,13 @@ define([
     JXG.createPerpendicularPoint = function (board, parents, attributes) {
         var l, p, t;
 
-        if (Type.isPoint(parents[0]) && parents[1].elementClass === Const.OBJECT_CLASS_LINE) {
-            p = parents[0];
+        parents[0] = board.select(parents[0]);
+        parents[1] = board.select(parents[1]);
+        if (Type.isPointType(parents[0], board) && parents[1].elementClass === Const.OBJECT_CLASS_LINE) {
+            p = Type.providePoints(board, [parents[0]], attributes, 'point')[0];
             l = parents[1];
-        } else if (Type.isPoint(parents[1]) && parents[0].elementClass === Const.OBJECT_CLASS_LINE) {
-            p = parents[1];
+        } else if (Type.isPointType(parents[1], board) && parents[0].elementClass === Const.OBJECT_CLASS_LINE) {
+            p = Type.providePoints(board, [parents[1]], attributes, 'point')[0];
             l = parents[0];
         } else {
             throw new Error("JSXGraph: Can't create perpendicular point with parent types '" +
@@ -422,13 +426,12 @@ define([
 
         parents[0] = board.select(parents[0]);
         parents[1] = board.select(parents[1]);
-
-        if (Type.isPoint(parents[0]) && parents[1].elementClass === Const.OBJECT_CLASS_LINE) {
+        if (Type.isPointType(parents[0], board) && parents[1].elementClass === Const.OBJECT_CLASS_LINE) {
             l = parents[1];
-            p = parents[0];
-        } else if (Type.isPoint(parents[1]) && parents[0].elementClass === Const.OBJECT_CLASS_LINE) {
+            p = Type.providePoints(board, [parents[0]], attributes, 'point')[0];
+        } else if (Type.isPointType(parents[1], board) && parents[0].elementClass === Const.OBJECT_CLASS_LINE) {
             l = parents[0];
-            p = parents[1];
+            p = Type.providePoints(board, [parents[1]], attributes, 'point')[0];
         } else {
             throw new Error("JSXGraph: Can't create perpendicular with parent types '" +
                 (typeof parents[0]) + "' and '" + (typeof parents[1]) + "'." +
@@ -499,9 +502,13 @@ define([
      * </script><pre>
      */
     JXG.createMidpoint = function (board, parents, attributes) {
-        var a, b, t;
+        var a, b, t, i;
 
-        if (parents.length === 2 && Type.isPoint(parents[0]) && Type.isPoint(parents[1])) {
+        for (i = 0; i < parents.length; ++i) {
+            parents[i] = board.select(parents[i]);
+        }
+        if (parents.length === 2 && Type.isPointType(parents[0], board) && Type.isPointType(parents[1], board)) {
+            parents = Type.providePoints(board, parents, attributes, 'point');
             a = parents[0];
             b = parents[1];
         } else if (parents.length === 1 && parents[0].elementClass === Const.OBJECT_CLASS_LINE) {
@@ -612,22 +619,27 @@ define([
      * </script><pre>
      */
     JXG.createParallelPoint = function (board, parents, attributes) {
-        var a, b, c, p;
+        var a, b, c, p, i;
 
-        if (parents.length === 3 && parents[0].elementClass === Const.OBJECT_CLASS_POINT &&
-                parents[1].elementClass === Const.OBJECT_CLASS_POINT &&
-                parents[2].elementClass === Const.OBJECT_CLASS_POINT) {
+        for (i = 0; i < parents.length; ++i) {
+            parents[i] = board.select(parents[i]);
+        }
+        if (parents.length === 3 &&
+                Type.isPointType(parents[0], board) &&
+                Type.isPointType(parents[1], board) &&
+                Type.isPointType(parents[2], board)) {
+            parents = Type.providePoints(board, parents, attributes, 'point');
             a = parents[0];
             b = parents[1];
             c = parents[2];
-        } else if (parents[0].elementClass === Const.OBJECT_CLASS_POINT &&
+        } else if (Type.isPointType(parents[0], board) &&
                 parents[1].elementClass === Const.OBJECT_CLASS_LINE) {
-            c = parents[0];
+            c = Type.providePoints(board, [parents[0]], attributes, 'point')[0];
             a = parents[1].point1;
             b = parents[1].point2;
-        } else if (parents[1].elementClass === Const.OBJECT_CLASS_POINT &&
+        } else if (Type.isPointType(parents[1], board) &&
                 parents[0].elementClass === Const.OBJECT_CLASS_LINE) {
-            c = parents[1];
+            c = Type.providePoints(board, [parents[1]], attributes, 'point')[0];
             a = parents[0].point1;
             b = parents[0].point2;
         } else {
@@ -743,26 +755,30 @@ define([
      * </script><pre>
      */
     JXG.createParallel = function (board, parents, attributes) {
-        var p, pp, pl, li, attr;
+        var p, pp, pl, li, i, attr;
 
+        for (i = 0; i < parents.length; ++i) {
+            parents[i] = board.select(parents[i]);
+        }
         p = null;
         if (parents.length === 3) {
+            parents = Type.providePoints(board, parents, attributes, 'point');
             // line through point parents[2] which is parallel to line through parents[0] and parents[1]
             p = parents[2];
             /** @ignore */
             li = function () {
                 return Mat.crossProduct(parents[0].coords.usrCoords, parents[1].coords.usrCoords);
             };
-        } else if (parents[0].elementClass === Const.OBJECT_CLASS_POINT) {
+        } else if (Type.isPointType(parents[0], board)) {
             // Parallel to line parents[1] through point parents[0]
-            p = parents[0];
+            p = Type.providePoints(board, [parents[0]], attributes, 'point')[0];
             /** @ignore */
             li = function () {
                 return parents[1].stdform;
             };
-        } else if (parents[1].elementClass === Const.OBJECT_CLASS_POINT) {
+        } else if (Type.isPointType(parents[1], board)) {
             // Parallel to line parents[0] through point parents[1]
-            p = parents[1];
+            p = Type.providePoints(board, [parents[1]], attributes, 'point')[0];
             /** @ignore */
             li = function () {
                 return parents[0].stdform;
@@ -886,18 +902,21 @@ define([
     JXG.createNormal = function (board, parents, attributes) {
         var p, c, l, i, g, f, attr, pp, attrp;
 
+        for (i = 0; i < parents.length; ++i) {
+            parents[i] = board.select(parents[i]);
+        }
         // One arguments: glider on line, circle or curve
         if (parents.length === 1) {
             p = parents[0];
             c = p.slideObject;
         // Two arguments: (point,line), (point,circle), (line,point) or (circle,point)
         } else if (parents.length === 2) {
-            if (Type.isPoint(parents[0])) {
-                p = parents[0];
+            if (Type.isPointType(parents[0], board)) {
+                p = Type.providePoints(board, [parents[0]], attributes, 'point')[0];
                 c = parents[1];
-            } else if (Type.isPoint(parents[1])) {
+            } else if (Type.isPointType(parents[1], board)) {
                 c = parents[0];
-                p = parents[1];
+                p = Type.providePoints(board, [parents[1]], attributes, 'point')[0];
             } else {
                 throw new Error("JSXGraph: Can't create normal with parent types '" +
                     (typeof parents[0]) + "' and '" + (typeof parents[1]) + "'." +
@@ -1123,13 +1142,12 @@ define([
     JXG.createBisector = function (board, parents, attributes) {
         var p, l, i, attr;
 
-        if (parents[0].elementClass === Const.OBJECT_CLASS_POINT &&
-                parents[1].elementClass === Const.OBJECT_CLASS_POINT &&
-                parents[2].elementClass === Const.OBJECT_CLASS_POINT) {
+        parents = Type.providePoints(board, parents, attributes, 'point');
+        if (Type.isPoint(parents[0]) && Type.isPoint(parents[1]) && Type.isPoint(parents[2])) {
             // hidden and fixed helper
             attr = Type.copyAttributes(attributes, board.options, 'bisector', 'point');
             attr.snapToGrid = false;
-            
+
             p = board.create('point', [
                 function () {
                     return Geometry.angleBisector(parents[0], parents[1], parents[2], board);
@@ -1331,15 +1349,16 @@ define([
     JXG.createCircumcenter = function (board, parents, attributes) {
         var p, i, a, b, c;
 
-        if (parents[0].elementClass === Const.OBJECT_CLASS_POINT && parents[1].elementClass === Const.OBJECT_CLASS_POINT &&
-                parents[2].elementClass === Const.OBJECT_CLASS_POINT) {
+        parents = Type.providePoints(board, parents, attributes, 'point');
+        if (Type.isPoint(parents[0]) && Type.isPoint(parents[1]) && Type.isPoint(parents[2])) {
+
             a = parents[0];
             b = parents[1];
             c = parents[2];
 
             p = Point.createPoint(board, [
                 function () {
-                    return Geometry.circumcenterMidpoint(a, b, c, board);
+                    return Geometry.circumcenter(a, b, c, board);
                 }
             ], attributes);
 
@@ -1412,6 +1431,7 @@ define([
     JXG.createIncenter = function (board, parents, attributes) {
         var p, A, B, C;
 
+        parents = Type.providePoints(board, parents, attributes, 'point');
         if (parents.length >= 3 && Type.isPoint(parents[0]) && Type.isPoint(parents[1]) && Type.isPoint(parents[2])) {
             A = parents[0];
             B = parents[1];
@@ -1465,6 +1485,13 @@ define([
      */
     JXG.createCircumcircle = function (board, parents, attributes) {
         var p, c, attr;
+
+        parents = Type.providePoints(board, parents, attributes, 'point');
+        if (parents === false) {
+            throw new Error("JSXGraph: Can't create circumcircle with parent types '" +
+                (typeof parents[0]) + "', '" + (typeof parents[1]) + "' and '" + (typeof parents[2]) + "'." +
+                "\nPossible parent types: [point,point,point]");
+        }
 
         try {
             attr = Type.copyAttributes(attributes, board.options, 'circumcircle', 'center');
@@ -1522,6 +1549,12 @@ define([
     JXG.createIncircle = function (board, parents, attributes) {
         var p, c, attr;
 
+        parents = Type.providePoints(board, parents, attributes, 'point');
+        if (parents === false) {
+            throw new Error("JSXGraph: Can't create circumcircle with parent types '" +
+                (typeof parents[0]) + "', '" + (typeof parents[1]) + "' and '" + (typeof parents[2]) + "'." +
+                "\nPossible parent types: [point,point,point]");
+        }
         try {
             attr = Type.copyAttributes(attributes, board.options, 'incircle', 'center');
             p = JXG.createIncenter(board, parents, attr);
@@ -1595,13 +1628,16 @@ define([
      * </script><pre>
      */
     JXG.createReflection = function (board, parents, attributes) {
-        var l, p, r, t;
+        var l, p, r, t, i;
 
-        if (parents[0].elementClass === Const.OBJECT_CLASS_POINT && parents[1].elementClass === Const.OBJECT_CLASS_LINE) {
-            p = parents[0];
+        for (i = 0; i < parents.length; ++i) {
+            parents[i] = board.select(parents[i]);
+        }
+        if (Type.isPoint(parents[0]) && parents[1].elementClass === Const.OBJECT_CLASS_LINE) {
+            p = Type.providePoints(board, [parents[0]], attributes, 'point')[0];
             l = parents[1];
-        } else if (parents[1].elementClass === Const.OBJECT_CLASS_POINT && parents[0].elementClass === Const.OBJECT_CLASS_LINE) {
-            p = parents[1];
+        } else if (Type.isPoint(parents[1]) && parents[0].elementClass === Const.OBJECT_CLASS_LINE) {
+            p = Type.providePoints(board, [parents[1]], attributes, 'point')[0];
             l = parents[0];
         } else {
             throw new Error("JSXGraph: Can't create reflection point with parent types '" +
@@ -1674,6 +1710,7 @@ define([
     JXG.createMirrorPoint = function (board, parents, attributes) {
         var p, i;
 
+        parents = Type.providePoints(board, parents, attributes, 'point');
         if (Type.isPoint(parents[0]) && Type.isPoint(parents[1])) {
             p = Point.createPoint(board, [
                 function () {
@@ -2127,25 +2164,43 @@ define([
      * @class Creates an area indicating the solution of a linear inequality.
      * @pseudo
      * @description Display the solution set of a linear inequality (less than or equal to).
-     * @param {JXG.Line} l The area drawn will be the area below this line.
+     * @param {JXG.Line} l The area drawn will be the area below this line. With the attribute
+     * inverse:true, the inequlity 'greater than or equal to' is shown.
      * @constructor
      * @name Inequality
      * @type JXG.Curve
      * @augments JXG.Curve
      * @throws {Error} If the element cannot be constructed with the given parent objects an exception is thrown.
      * @example
-     * p = board.create('point', [1, 3]);
-     * q = board.create('point', [-2, -4]);
-     * l = board.create('line', [p, q]);
+     * var p = board.create('point', [1, 3]),
+     *     q = board.create('point', [-2, -4]),
+     *     l = board.create('line', [p, q]),
+     *     ineq = board.create('inequality', [l]);
      * ineq = board.create('inequality', [l]);
      * </pre><div id="2b703006-fd98-11e1-b79e-ef9e591c002e" style="width: 400px; height: 400px;"></div>
      * <script type="text/javascript">
      * (function () {
-     *  board = JXG.JSXGraph.initBoard('2b703006-fd98-11e1-b79e-ef9e591c002e', {boundingbox:[-4, 6, 10, -6], axis: false, grid: false, keepaspectratio: true});
-     *  p = board.create('point', [1, 3]);
-     *  q = board.create('point', [-2, -4]);
-     *  l = board.create('line', [p, q]);
-     *  ineq = board.create('inequality', [l]);
+     *  var board = JXG.JSXGraph.initBoard('2b703006-fd98-11e1-b79e-ef9e591c002e', {boundingbox:[-4, 6, 10, -6], axis: false, grid: false, keepaspectratio: true}),
+     *      p = board.create('point', [1, 3]),
+     *      q = board.create('point', [-2, -4]),
+     *      l = board.create('line', [p, q]),
+     *      ineq = board.create('inequality', [l]);
+     * })();
+     * </script><pre>
+     *
+     * @example
+     * // Plot the inequality 
+     * //     y >= 2/3 x + 1 
+     * // or 
+     * //     0 >= -3y + 2x +1
+     * var l = board.create('line', [1, 2, -3]),
+     *     ineq = board.create('inequality', [l], {inverse:true});
+     * </pre><div id="1ded3812-2da4-4323-abaf-1db4bad1bfbd" style="width: 400px; height: 400px;"></div>
+     * <script type="text/javascript">
+     * (function () {
+     *  var board = JXG.JSXGraph.initBoard('1ded3812-2da4-4323-abaf-1db4bad1bfbd', {boundingbox:[-4, 6, 10, -6], axis: false, grid: false, keepaspectratio: true}),
+     *      l = board.create('line', [1, 2, -3]),
+     *      ineq = board.create('inequality', [l], {inverse:true});
      * })();
      * </script><pre>
      */
@@ -2192,7 +2247,7 @@ define([
                         usrCoords: [1, (bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2]
                     }
                 };
-                
+
                 // If dp is on the line, Geometry.perpendicular will return a point not on the line.
                 // Since this somewhat odd behavior of Geometry.perpendicular is needed in GEONExT,
                 // it is circumvented here.

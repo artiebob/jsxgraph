@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2013
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -657,55 +657,6 @@ define([
             return this;
         },
 
-        /**
-         * Apply a translation by <tt>tv = (x, y)</tt> to the line.
-         * @param {Number} method The type of coordinates used here. Possible values are {@link JXG.COORDS_BY_USER} and {@link JXG.COORDS_BY_SCREEN}.
-         * @param {Array} tv (x, y)
-         * @returns {JXG.Line} Reference to this line object.
-         */
-        setPosition: function (method, tv) {
-            var t;
-
-            tv = new Coords(method, tv, this.board);
-            t = this.board.create('transform', tv.usrCoords.slice(1), {type: 'translate'});
-
-            if (this.point1.transformations.length > 0 && this.point1.transformations[this.point1.transformations.length - 1].isNumericMatrix) {
-                this.point1.transformations[this.point1.transformations.length - 1].melt(t);
-            } else {
-                this.point1.addTransform(this.point1, t);
-            }
-            if (this.point2.transformations.length > 0 && this.point2.transformations[this.point2.transformations.length - 1].isNumericMatrix) {
-                this.point2.transformations[this.point2.transformations.length - 1].melt(t);
-            } else {
-                this.point2.addTransform(this.point2, t);
-            }
-
-            return this;
-        },
-
-        /**
-         * Moves the line by the difference of two coordinates.
-         * @param {Number} method The type of coordinates used here. Possible values are {@link JXG.COORDS_BY_USER} and {@link JXG.COORDS_BY_SCREEN}.
-         * @param {Array} coords coordinates in screen/user units
-         * @param {Array} oldcoords previous coordinates in screen/user units
-         * @returns {JXG.Line} this element
-         */
-        setPositionDirectly: function (method, coords, oldcoords) {
-            var dc, t,
-                c = new Coords(method, coords, this.board),
-                oldc = new Coords(method, oldcoords, this.board);
-
-            if (!this.point1.draggable() || !this.point2.draggable()) {
-                return this;
-            }
-
-            dc = Statistics.subtract(c.usrCoords, oldc.usrCoords);
-            t = this.board.create('transform', dc.slice(1), {type: 'translate'});
-            t.applyOnce([this.point1, this.point2]);
-
-            return this;
-        },
-
         // see GeometryElement.js
         snapToGrid: function (pos) {
             var c1, c2, dc, t, v, ticks,
@@ -741,9 +692,12 @@ define([
                     // if no valid snap sizes are available, don't change the coords.
                     if (sX > 0 && sY > 0) {
                         // projectCoordsToLine
+                        /*
                         v = [0, this.stdform[1], this.stdform[2]];
                         v = Mat.crossProduct(v, c1.usrCoords);
                         c2 = Geometry.meetLineLine(v, this.stdform, 0, this.board);
+                        */
+                        c2 = Geometry.projectPointToLine({coords: c1}, this, this.board);
 
                         dc = Statistics.subtract([1, Math.round(x / sX) * sX, Math.round(y / sY) * sY], c2.usrCoords);
                         t = this.board.create('transform', dc.slice(1), {type: 'translate'});
@@ -1000,9 +954,9 @@ define([
             if (Type.isArray(parents[0]) && parents[0].length > 1) {
                 attr = Type.copyAttributes(attributes, board.options, 'line', 'point1');
                 p1 = board.create('point', parents[0], attr);
-            } else if (Type.isString(parents[0]) || parents[0].elementClass === Const.OBJECT_CLASS_POINT) {
+            } else if (Type.isString(parents[0]) || Type.isPoint(parents[0])) {
                 p1 =  board.select(parents[0]);
-            } else if ((typeof parents[0] === 'function') && (parents[0]().elementClass === Const.OBJECT_CLASS_POINT)) {
+            } else if ((typeof parents[0] === 'function') && ( Type.isPoint(parents[0]()) )) {
                 p1 = parents[0]();
                 constrained = true;
             } else if ((typeof parents[0] === 'function') && (parents[0]().length && parents[0]().length === 2)) {
@@ -1019,9 +973,9 @@ define([
             if (Type.isArray(parents[1]) && parents[1].length > 1) {
                 attr = Type.copyAttributes(attributes, board.options, 'line', 'point2');
                 p2 = board.create('point', parents[1], attr);
-            } else if (Type.isString(parents[1]) || parents[1].elementClass === Const.OBJECT_CLASS_POINT) {
+            } else if (Type.isString(parents[1]) || Type.isPoint(parents[1])) {
                 p2 =  board.select(parents[1]);
-            } else if ((typeof parents[1] === 'function') && (parents[1]().elementClass === Const.OBJECT_CLASS_POINT)) {
+            } else if ((typeof parents[1] === 'function') && ( Type.isPoint(parents[1]()) )) {
                 p2 = parents[1]();
                 constrained = true;
             } else if ((typeof parents[1] === 'function') && (parents[1]().length && parents[1]().length === 2)) {
@@ -1124,8 +1078,8 @@ define([
             }
         // The parent array contains a function which returns two points.
         } else if ((parents.length === 1) && (typeof parents[0] === 'function') && (parents[0]().length === 2) &&
-                (parents[0]()[0].elementClass === Const.OBJECT_CLASS_POINT) &&
-                (parents[0]()[1].elementClass === Const.OBJECT_CLASS_POINT)) {
+                (Type.isPoint(parents[0]()[0])) &&
+                (Type.isPoint(parents[0]()[1]))) {
             ps = parents[0]();
             attr = Type.copyAttributes(attributes, board.options, 'line');
             el = new JXG.Line(board, ps[0], ps[1], attr);
@@ -1222,15 +1176,15 @@ define([
      * </pre><div id="617336ba-0705-4b2b-a236-c87c28ef25be" style="width: 300px; height: 300px;"></div>
      * <script type="text/javascript">
      *   var slex2_board = JXG.JSXGraph.initBoard('617336ba-0705-4b2b-a236-c87c28ef25be', {boundingbox: [-1, 7, 7, -1], axis: true, showcopyright: false, shownavigation: false});
-     *   var slex2_p1 = slex1_board.create('point', [4.0, 1.0]);
-     *   var slex2_p2 = slex1_board.create('point', [1.0, 1.0]);
-     *   var slex2_l1 = slex1_board.create('segment', [slex1_p1, slex1_p2]);
-     *   var slex2_p3 = slex1_board.create('point', [4.0, 2.0]);
-     *   var slex2_p4 = slex1_board.create('point', [1.0, 2.0]);
-     *   var slex2_l2 = slex1_board.create('segment', [slex1_p3, slex1_p4, 3]);
-     *   var slex2_p5 = slex1_board.create('point', [4.0, 2.0]);
-     *   var slex2_p6 = slex1_board.create('point', [1.0, 2.0]);
-     *   var slex2_l3 = slex1_board.create('segment', [slex1_p5, slex1_p6, function(){ return slex2_l1.L();}]);
+     *   var slex2_p1 = slex2_board.create('point', [4.0, 1.0]);
+     *   var slex2_p2 = slex2_board.create('point', [1.0, 1.0]);
+     *   var slex2_l1 = slex2_board.create('segment', [slex2_p1, slex2_p2]);
+     *   var slex2_p3 = slex2_board.create('point', [4.0, 2.0]);
+     *   var slex2_p4 = slex2_board.create('point', [1.0, 2.0]);
+     *   var slex2_l2 = slex2_board.create('segment', [slex2_p3, slex2_p4, 3]);
+     *   var slex2_p5 = slex2_board.create('point', [4.0, 2.0]);
+     *   var slex2_p6 = slex2_board.create('point', [1.0, 2.0]);
+     *   var slex2_l3 = slex2_board.create('segment', [slex2_p5, slex2_p6, function(){ return slex2_l1.L();}]);
      * </script><pre>
      *
      */
@@ -1674,12 +1628,11 @@ define([
         el2 = board.select(parents[1]);
 
         el = board.create('line', [function () {
-                var a = el1.stdform,
-                    b = el2.stdform;
-                    
-                return JXG.Math.matVecMult(
-                    JXG.Math.transpose([a.slice(0,3), b.slice(0,3)]), [b[3] , -a[3]]);
-             }], attributes);
+            var a = el1.stdform,
+                b = el2.stdform;
+
+            return Mat.matVecMult(Mat.transpose([a.slice(0, 3), b.slice(0, 3)]), [b[3], -a[3]]);
+        }], attributes);
 
         el.elType = 'radicalaxis';
         el.parents = [el1.id, el2.id];
@@ -1744,22 +1697,30 @@ define([
      * </script><pre>
      */
     JXG.createPolarLine = function (board, parents, attributes) {
-        var el, el1, el2;
+        var el, el1, el2,
+            firstParentIsConic, secondParentIsConic,
+            firstParentIsPoint, secondParentIsPoint;
 
-        if (parents.length !== 2 || !((
-                parents[0].type === Const.OBJECT_TYPE_CONIC ||
-                parents[0].elementClass === Const.OBJECT_CLASS_CIRCLE) &&
-                parents[1].elementClass === Const.OBJECT_CLASS_POINT ||
-                parents[0].elementClass === Const.OBJECT_CLASS_POINT && (
-                parents[1].type === Const.OBJECT_TYPE_CONIC ||
-                parents[1].elementClass === Const.OBJECT_CLASS_CIRCLE))) {
+        if (parents.length > 1) {
+            firstParentIsConic = (parents[0].type === Const.OBJECT_TYPE_CONIC ||
+                parents[0].elementClass === Const.OBJECT_CLASS_CIRCLE);
+            secondParentIsConic = (parents[1].type === Const.OBJECT_TYPE_CONIC ||
+                parents[1].elementClass === Const.OBJECT_CLASS_CIRCLE);
+
+            firstParentIsPoint = (Type.isPoint(parents[0]));
+            secondParentIsPoint = (Type.isPoint(parents[1]));
+        }
+
+        if (parents.length !== 2 ||
+                !((firstParentIsConic && secondParentIsPoint) ||
+                    (firstParentIsPoint && secondParentIsConic))) {
             // Failure
             throw new Error("JSXGraph: Can't create 'polar line' with parent types '" +
                 (typeof parents[0]) + "' and '" + (typeof parents[1]) + "'." +
                 "\nPossible parent type: [conic|circle,point], [point,conic|circle]");
         }
 
-        if (parents[1].elementClass === Const.OBJECT_CLASS_POINT) {
+        if (secondParentIsPoint) {
             el1 = board.select(parents[0]);
             el2 = board.select(parents[1]);
         } else {
@@ -1767,14 +1728,13 @@ define([
             el2 = board.select(parents[0]);
         }
 
-        //el = board.create('line', [function () {return JXG.Math.matVecMult(el1.quadraticform.slice(0,3),el2.coords.usrCoords.slice(0,3));}]);
         // Polar lines have been already provided in the tangent element.
         el = board.create('tangent', [el1, el2], attributes);
 
         el.elType = 'polarline';
         return el;
     };
-    
+
     /**
      * Register the element type tangent at JSXGraph
      * @private

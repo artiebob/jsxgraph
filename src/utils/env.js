@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2013
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -175,7 +175,7 @@ define(['jxg', 'utils/type'], function (JXG, Type) {
          * @return {Boolean}
          */
         isMetroApp: function () {
-            return typeof window === 'object' && window.clientInformation && window.clientInformation.appName && window.clientInformation.appName.indexOf('MSAppHost') > -1;
+            return typeof window === 'object' && window.clientInformation && window.clientInformation.appVersion && window.clientInformation.appVersion.indexOf('MSAppHost') > -1;
         },
 
         /**
@@ -230,7 +230,8 @@ define(['jxg', 'utils/type'], function (JXG, Type) {
          */
         getDimensions: function (elementId, doc) {
             var element, display, els, originalVisibility, originalPosition,
-                originalDisplay, originalWidth, originalHeight;
+                originalDisplay, originalWidth, originalHeight, style,
+                pixelDimRegExp = /\d+(\.\d*)?px/;
 
             if (!JXG.isBrowser || elementId === null) {
                 return {
@@ -250,7 +251,15 @@ define(['jxg', 'utils/type'], function (JXG, Type) {
 
             // Work around a bug in Safari
             if (display !== 'none' && display !== null) {
-                return {width: element.offsetWidth, height: element.offsetHeight};
+                if (element.offsetWidth > 0 && element.offsetHeight > 0) {
+                    return {width: element.offsetWidth, height: element.offsetHeight};
+                } else { // a parent might be set to display:none; try reading them from styles
+                    style = window.getComputedStyle ? window.getComputedStyle(element) : element.style;
+                    return {
+                        width: pixelDimRegExp.test(style.width) ? parseFloat(style.width) : 0,
+                        height: pixelDimRegExp.test(style.height) ? parseFloat(style.height) : 0
+                    };
+                }
             }
 
             // All *Width and *Height properties give 0 on elements with display set to none,
@@ -395,9 +404,14 @@ define(['jxg', 'utils/type'], function (JXG, Type) {
             if (!e) {
                 e = window.event;
             }
-            
+
             doc = doc || document;
             evtTouches = e[JXG.touchProperty];
+
+            // touchend events have their position in "changedTouches"
+            if (Type.exists(evtTouches) && evtTouches.length === 0) {
+                evtTouches = e.changedTouches;
+            }
 
             if (Type.exists(index) && Type.exists(evtTouches)) {
                 if (index === -1) {
@@ -409,6 +423,7 @@ define(['jxg', 'utils/type'], function (JXG, Type) {
                             break;
                         }
                     }
+
                 } else {
                     e = evtTouches[index];
                 }
@@ -489,7 +504,7 @@ define(['jxg', 'utils/type'], function (JXG, Type) {
             var r, doc;
 
             doc = obj.ownerDocument;
-            
+
             // Non-IE
             if (window.getComputedStyle) {
                 r = doc.defaultView.getComputedStyle(obj, null).getPropertyValue(stylename);

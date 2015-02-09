@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2014
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -136,6 +136,7 @@ define([
             vertices: 'vertices',
             A: 'Area',
             Area: 'Area',
+            boundingBox: 'boundingBox',
             addPoints: 'addPoints',
             insertPoints: 'insertPoints',
             removePoints: 'removePoints'
@@ -193,6 +194,8 @@ define([
                 this.label.update();
                 this.board.renderer.updateText(this.label);
             }
+
+            return this;
         },
 
         /**
@@ -269,7 +272,7 @@ define([
             if (this.hasLabel && Type.exists(this.label)) {
                 this.label.hiddenByParent = true;
                 if (this.label.visProp.visible) {
-                    this.board.renderer.hide(this.label);
+                    this.label.hideElement();
                 }
             }
         },
@@ -301,7 +304,8 @@ define([
         },
 
         /**
-         * returns the area of the polygon
+         * Area of (not self-intersecting) polygon
+         * @returns {Number} Area of (not self-intersecting) polygon
          */
         Area: function () {
             //Surveyor's Formula
@@ -314,6 +318,49 @@ define([
             area /= 2.0;
 
             return Math.abs(area);
+        },
+
+        /**
+         * Bounding box of a polygon. The bounding box is an array of four numbers: the first two numbers
+         * determine the upper left corner, the last two number determine the lower right corner of the bounding box.
+         * 
+         * The width and height of a polygon can then determined like this:
+         * @example
+         * var box = polygon.boundingBox();
+         * var width = box[2] - box[0];
+         * var height = box[1] - box[3];
+         * 
+         * @returns {Array} Array containing four numbers: [minX, maxY, maxX, minY]
+         */
+        boundingBox: function () {
+            var box = [0, 0, 0, 0], i, v,
+                le = this.vertices.length - 1;
+
+            if (le === 0) {
+                return box;
+            }
+            box[0] = this.vertices[0].X();
+            box[2] = box[0];
+            box[1] = this.vertices[0].Y();
+            box[3] = box[1];
+
+            for (i = 1; i < le; ++i) {
+                v = this.vertices[i].X();
+                if (v < box[0]) {
+                    box[0] = v;
+                } else if (v > box[2]) {
+                    box[2] = v;
+                }
+
+                v = this.vertices[i].Y();
+                if (v > box[1]) {
+                    box[1] = v;
+                } else if (v < box[3]) {
+                    box[3] = v;
+                }
+            }
+
+            return box;
         },
 
         /**
@@ -552,7 +599,7 @@ define([
         },
 
         /**
-         * Moves the line by the difference of two coordinates.
+         * Moves the polygon by the difference of two coordinates.
          * @param {Number} method The type of coordinates used here. Possible values are {@link JXG.COORDS_BY_USER} and {@link JXG.COORDS_BY_SCREEN}.
          * @param {Array} coords coordinates in screen/user units
          * @param {Array} oldcoords previous coordinates in screen/user units
@@ -581,8 +628,13 @@ define([
 
 
     /**
-     * @class A polygon is an area enclosed by a set of border lines which are determined by a list of points. Each two
-     * consecutive points of the list define a line.
+     * @class A polygon is an area enclosed by a set of border lines which are determined by 
+     * <ul>
+     *    <li> a list of points or 
+     *    <li> a list of coordinate arrays or
+     *    <li> a function returning a list of coordinate arrays.
+     * </ul>
+     * Each two consecutive points of the list define a line.
      * @pseudo
      * @constructor
      * @name Polygon
@@ -595,34 +647,64 @@ define([
      * var p1 = board.create('point', [0.0, 2.0]);
      * var p2 = board.create('point', [2.0, 1.0]);
      * var p3 = board.create('point', [4.0, 6.0]);
-     * var p4 = board.create('point', [1.0, 3.0]);
+     * var p4 = board.create('point', [1.0, 4.0]);
      *
      * var pol = board.create('polygon', [p1, p2, p3, p4]);
      * </pre><div id="682069e9-9e2c-4f63-9b73-e26f8a2b2bb1" style="width: 400px; height: 400px;"></div>
      * <script type="text/javascript">
      *  (function () {
- *   var board = JXG.JSXGraph.initBoard('682069e9-9e2c-4f63-9b73-e26f8a2b2bb1', {boundingbox: [-1, 9, 9, -1], axis: false, showcopyright: false, shownavigation: false}),
- *       p1 = board.create('point', [0.0, 2.0]),
- *       p2 = board.create('point', [2.0, 1.0]),
- *       p3 = board.create('point', [4.0, 6.0]),
- *       p4 = board.create('point', [1.0, 3.0]),
- *       cc1 = board.create('polygon', [p1, p2, p3, p4]);
- *  })();
+     *   var board = JXG.JSXGraph.initBoard('682069e9-9e2c-4f63-9b73-e26f8a2b2bb1', {boundingbox: [-1, 9, 9, -1], axis: false, showcopyright: false, shownavigation: false}),
+     *       p1 = board.create('point', [0.0, 2.0]),
+     *       p2 = board.create('point', [2.0, 1.0]),
+     *       p3 = board.create('point', [4.0, 6.0]),
+     *       p4 = board.create('point', [1.0, 4.0]),
+     *       cc1 = board.create('polygon', [p1, p2, p3, p4]);
+     *  })();
+     * </script><pre>
+     *
+     * @example
+     * var p = [[0.0, 2.0], [2.0, 1.0], [4.0, 6.0], [4.0, 6.0], [4.0, 6.0], [1.0, 3.0]];
+     *
+     * var pol = board.create('polygon', p, {hasInnerPoints: true});
+     * </pre><div id="9f9a5946-112a-4768-99ca-f30792bcdefb" style="width: 400px; height: 400px;"></div>
+     * <script type="text/javascript">
+     *  (function () {
+     *   var board = JXG.JSXGraph.initBoard('9f9a5946-112a-4768-99ca-f30792bcdefb', {boundingbox: [-1, 9, 9, -1], axis: false, showcopyright: false, shownavigation: false}),
+     *       p = [[0.0, 2.0], [2.0, 1.0], [4.0, 6.0], [4.0, 6.0], [4.0, 6.0], [1.0, 4.0]],
+     *       cc1 = board.create('polygon', p, {hasInnerPoints: true});
+     *  })();
+     * </script><pre>
+     *
+     * @example
+     *   var f1 = function() { return [0.0, 2.0]; }, 
+     *       f2 = function() { return [2.0, 1.0]; }, 
+     *       f3 = function() { return [4.0, 6.0]; }, 
+     *       f4 = function() { return [1.0, 4.0]; }, 
+     *       cc1 = board.create('polygon', [f1, f2, f3, f4]);
+     *
+     * </pre><div id="ceb09915-b783-44db-adff-7877ae3534c8" style="width: 400px; height: 400px;"></div>
+     * <script type="text/javascript">
+     *  (function () {
+     *   var board = JXG.JSXGraph.initBoard('ceb09915-b783-44db-adff-7877ae3534c8', {boundingbox: [-1, 9, 9, -1], axis: false, showcopyright: false, shownavigation: false}),
+     *       f1 = function() { return [0.0, 2.0]; }, 
+     *       f2 = function() { return [2.0, 1.0]; }, 
+     *       f3 = function() { return [4.0, 6.0]; }, 
+     *       f4 = function() { return [1.0, 4.0]; }, 
+     *       cc1 = board.create('polygon', [f1, f2, f3, f4]);
+     *  })();
      * </script><pre>
      */
     JXG.createPolygon = function (board, parents, attributes) {
-        var el, i,
-            attr = Type.copyAttributes(attributes, board.options, 'polygon');
+        var el, i, points = [],
+            attr, p;
 
-        // Sind alles Punkte?
-        for (i = 0; i < parents.length; i++) {
-            parents[i] = board.select(parents[i]);
-            if (!Type.isPoint(parents[i])) {
-                throw new Error("JSXGraph: Can't create polygon with parent types other than 'point'.");
-            }
+        points = Type.providePoints(board, parents, attributes, 'polygon', ['vertices']);
+        if (points === false) {
+            throw new Error("JSXGraph: Can't create polygon with parent types other than 'point' and 'coordinate arrays' or a function returning an array of coordinates");
         }
 
-        el = new JXG.Polygon(board, parents, attr);
+        attr = Type.copyAttributes(attributes, board.options, 'polygon');
+        el = new JXG.Polygon(board, points, attr);
         el.isDraggable = true;
 
         return el;
@@ -647,11 +729,11 @@ define([
      * </pre><div id="682069e9-9e2c-4f63-9b73-e26f8a2b2bb1" style="width: 400px; height: 400px;"></div>
      * <script type="text/javascript">
      *  (function () {
- *   var board = JXG.JSXGraph.initBoard('682069e9-9e2c-4f63-9b73-e26f8a2b2bb1', {boundingbox: [-1, 9, 9, -1], axis: false, showcopyright: false, shownavigation: false}),
- *       p1 = board.create('point', [0.0, 2.0]),
- *       p2 = board.create('point', [2.0, 1.0]),
- *       cc1 = board.create('regularpolygon', [p1, p2, 5]);
- *  })();
+     *   var board = JXG.JSXGraph.initBoard('682069e9-9e2c-4f63-9b73-e26f8a2b2bb1', {boundingbox: [-1, 9, 9, -1], axis: false, showcopyright: false, shownavigation: false}),
+     *       p1 = board.create('point', [0.0, 2.0]),
+     *       p2 = board.create('point', [2.0, 1.0]),
+     *       cc1 = board.create('regularpolygon', [p1, p2, 5]);
+     *  })();
      * </script><pre>
      * @example
      * var p1 = board.create('point', [0.0, 2.0]);
@@ -662,52 +744,44 @@ define([
      * </pre><div id="096a78b3-bd50-4bac-b958-3be5e7df17ed" style="width: 400px; height: 400px;"></div>
      * <script type="text/javascript">
      * (function () {
- *   var board = JXG.JSXGraph.initBoard('096a78b3-bd50-4bac-b958-3be5e7df17ed', {boundingbox: [-1, 9, 9, -1], axis: false, showcopyright: false, shownavigation: false}),
- *       p1 = board.create('point', [0.0, 2.0]),
- *       p2 = board.create('point', [4.0, 4.0]),
- *       p3 = board.create('point', [2.0,0.0]),
- *       cc1 = board.create('regularpolygon', [p1, p2, p3]);
- * })();
+     *   var board = JXG.JSXGraph.initBoard('096a78b3-bd50-4bac-b958-3be5e7df17ed', {boundingbox: [-1, 9, 9, -1], axis: false, showcopyright: false, shownavigation: false}),
+     *       p1 = board.create('point', [0.0, 2.0]),
+     *       p2 = board.create('point', [4.0, 4.0]),
+     *       p3 = board.create('point', [2.0,0.0]),
+     *       cc1 = board.create('regularpolygon', [p1, p2, p3]);
+     * })();
      * </script><pre>
      */
     JXG.createRegularPolygon = function (board, parents, attributes) {
-        var el, i, n, p = [], rot, c, len, pointsExist, attr;
-
-        if (Type.isNumber(parents[parents.length - 1]) && parents.length !== 3) {
-            throw new Error("JSXGraph: A regular polygon needs two points and a number as input.");
-        }
+        var el, i, n,
+            p = [], rot, c, len, pointsExist, attr;
 
         len = parents.length;
         n = parents[len - 1];
-        if ((!Type.isNumber(n) && !Type.isPoint(board.select(n))) || n < 3) {
-            throw new Error("JSXGraph: The third parameter has to be number greater than 2 or a point.");
+
+        if (Type.isNumber(n) && (parents.length !== 3 || n < 3)) {
+            throw new Error("JSXGraph: A regular polygon needs two point types and a number > 2 as input.");
         }
 
-        // Regular polygon given by n points
-        if (Type.isPoint(board.select(n))) {
-            n = len;
-            pointsExist = true;
-        } else {
+        if (Type.isNumber(board.select(n))) { // Regular polygon given by 2 points and a number
             len--;
             pointsExist = false;
+        } else {                              // Regular polygon given by n points
+            n = len;
+            pointsExist = true;
         }
 
-        // The first two parent elements have to be points
-        for (i = 0; i < len; i++) {
-            parents[i] = board.select(parents[i]);
-            if (!Type.isPoint(parents[i])) {
-                throw new Error("JSXGraph: Can't create regular polygon if the first two parameters aren't points.");
-            }
+        p = Type.providePoints(board, parents.slice(0, len), attributes, 'regularpolygon', ['vertices']);
+        if (p === false) {
+            throw new Error("JSXGraph: Can't create regular polygon with parent types other than 'point' and 'coordinate arrays' or a function returning an array of coordinates");
         }
 
-        p[0] = parents[0];
-        p[1] = parents[1];
-        attr = Type.copyAttributes(attributes, board.options, 'polygon', 'vertices');
+        attr = Type.copyAttributes(attributes, board.options, 'regularpolygon', 'vertices');
         for (i = 2; i < n; i++) {
             rot = board.create('transform', [Math.PI * (2 - (n - 2) / n), p[i - 1]], {type: 'rotate'});
             if (pointsExist) {
-                p[i] = parents[i];
-                p[i].addTransform(parents[i - 2], rot);
+                p[i].addTransform(p[i - 2], rot);
+                p[i].prepareUpdate().update().updateRenderer();
             } else {
                 if (Type.isArray(attr.ids) && attr.ids.length >= n - 2) {
                     attr.id = attr.ids[i - 2];
@@ -715,12 +789,13 @@ define([
                 p[i] = board.create('point', [p[i - 2], rot], attr);
                 p[i].type = Const.OBJECT_TYPE_CAS;
 
-                // The next two lines of code are need to make regular polgonmes draggable
+                // The next two lines of code are needed to make regular polgonmes draggable
                 // The new helper points are set to be draggable.
                 p[i].isDraggable = true;
                 p[i].visProp.fixed = false;
             }
         }
+
         attr = Type.copyAttributes(attributes, board.options, 'polygon');
         el = board.create('polygon', p, attr);
         el.elType = 'regularpolygon';

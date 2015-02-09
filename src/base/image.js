@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2013
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -10,20 +10,20 @@
     This file is part of JSXGraph.
 
     JSXGraph is free software dual licensed under the GNU LGPL or MIT License.
-    
+
     You can redistribute it and/or modify it under the terms of the
-    
+
       * GNU Lesser General Public License as published by
         the Free Software Foundation, either version 3 of the License, or
         (at your option) any later version
       OR
       * MIT License: https://github.com/jsxgraph/jsxgraph/blob/master/LICENSE.MIT
-    
+
     JSXGraph is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU Lesser General Public License for more details.
-    
+
     You should have received a copy of the GNU Lesser General Public License and
     the MIT License along with JSXGraph. If not, see <http://www.gnu.org/licenses/>
     and <http://opensource.org/licenses/MIT/>.
@@ -48,31 +48,38 @@
  */
 
 define([
-    'jxg', 'base/constants', 'base/coords', 'base/element', 'math/math', 'math/statistics', 'utils/type'
-], function (JXG, Const, Coords, GeometryElement, Mat, Statistics, Type) {
+    'jxg', 'base/constants', 'base/coords', 'base/element', 'math/math', 'math/statistics', 'utils/type', 'base/coordselement'
+], function (JXG, Const, Coords, GeometryElement, Mat, Statistics, Type, CoordsElement) {
 
     "use strict";
 
     /**
      * Construct and handle images
-     * @class Image:
-     * It inherits from @see GeometryElement.
-     * @constructor
+     * The coordinates can be relative to the coordinates of an element 
+     * given in {@link JXG.Options#text.anchor}.
+     * 
+     * The image can be supplied as an URL or an base64 encoded inline image
+     * like "data:image/png;base64, /9j/4AAQSkZJRgA..." or a function returning 
+     * an URL: function(){ return 'xxx.png; }.
+     *      
+     * @class Creates a new image object. Do not use this constructor to create a image. Use {@link JXG.Board#create} with
+     * type {@link Image} instead.
+     * @augments JXG.GeometryElement
+     * @augments JXG.CoordsElement
+     * @param {string|JXG.Board} board The board the new text is drawn on.
+     * @param {Array} coordinates An array with the user coordinates of the text.
+     * @param {Object} attributes An object containing visual and - optionally - a name and an id.
+     * @param {string|function} url An URL string or a function returning an URL string.
+     * @param  {Array} size Array containing width and height of the image in user coordinates.
+     *
      */
-    JXG.Image = function (board, url, coords, size, attributes) {
+    JXG.Image = function (board, coords, attributes, url, size) {
         this.constructor(board, attributes, Const.OBJECT_TYPE_IMAGE, Const.OBJECT_CLASS_OTHER);
+        this.element = this.board.select(attributes.anchor);
+        this.coordsConstructor(coords);
 
-        this.initialCoords = new Coords(Const.COORDS_BY_USER, coords, this.board);  // Still needed?
-
-        if (!Type.isFunction(coords[0]) && !Type.isFunction(coords[1])) {
-            this.isDraggable = true;
-        }
-        this.X = Type.createFunction(coords[0], this.board, '');
-        this.Y = Type.createFunction(coords[1], this.board, '');
-        this.Z = Type.createFunction(1, this.board, '');
         this.W = Type.createFunction(size[0], this.board, '');
         this.H = Type.createFunction(size[1], this.board, '');
-        this.coords = new Coords(Const.COORDS_BY_USER, [this.X(), this.Y()], this.board);
         this.usrSize = [this.W(), this.H()];
         this.size = [Math.abs(this.usrSize[0] * board.unitX), Math.abs(this.usrSize[1] * board.unitY)];
         this.url = url;
@@ -82,19 +89,16 @@ define([
         // span contains the anchor point and the two vectors
         // spanning the image rectangle.
         this.span = [
-            [this.Z(), this.X(), this.Y()],
-            [this.Z(), this.W(), 0],
-            [this.Z(), 0, this.H()]
+            this.coords.usrCoords.slice(0),
+            [this.coords.usrCoords[0], this.W(), 0],
+            [this.coords.usrCoords[0], 0, this.H()]
         ];
 
-        this.parent = board.select(attributes.anchor);
-
+        //this.parent = board.select(attributes.anchor);
         this.id = this.board.setId(this, 'Im');
 
         this.board.renderer.drawImage(this);
-        if (!this.visProp.visible) {
-            this.board.renderer.hide(this);
-        }
+        this.board.finalizeAdding(this);
 
         this.methodMap = JXG.deepCopy(this.methodMap, {
             addTransformation: 'addTransform',
@@ -103,6 +107,7 @@ define([
     };
 
     JXG.Image.prototype = new GeometryElement();
+    Type.copyPrototypeMethods(JXG.Image, CoordsElement, 'coordsConstructor');
 
     JXG.extend(JXG.Image.prototype, /** @lends JXG.Image.prototype */ {
 
@@ -152,16 +157,16 @@ define([
          * Recalculate the coordinates of lower left corner and the width amd the height.
          * @private
          */
-        update: function () {
-            if (this.needsUpdate) {
-                if (!this.visProp.frozen) {
-                    this.updateCoords();
-                }
-                this.usrSize = [this.W(), this.H()];
-                this.size = [Math.abs(this.usrSize[0] * this.board.unitX), Math.abs(this.usrSize[1] * this.board.unitY)];
-                this.updateTransform();
-                this.updateSpan();
+        update: function (fromParent) {
+            if (!this.needsUpdate) {
+                return this;
             }
+
+            this.updateCoords(fromParent);
+            this.usrSize = [this.W(), this.H()];
+            this.size = [Math.abs(this.usrSize[0] * this.board.unitX), Math.abs(this.usrSize[1] * this.board.unitY)];
+            this.updateSpan();
+
             return this;
         },
 
@@ -169,31 +174,7 @@ define([
          * Send an update request to the renderer.
          */
         updateRenderer: function () {
-            if (this.needsUpdate) {
-                this.board.renderer.updateImage(this);
-                this.needsUpdate = false;
-            }
-
-            return this;
-        },
-
-        updateTransform: function () {
-            var i, len = this.transformations.length;
-
-            if (len > 0) {
-                for (i = 0; i < len; i++) {
-                    this.transformations[i].update();
-                }
-            }
-
-            return this;
-        },
-
-        /**
-         * Updates the coordinates of the top left corner of the image.
-         */
-        updateCoords: function () {
-            this.coords.setCoordinates(Const.COORDS_BY_USER, [this.X(), this.Y()]);
+            return this.updateRendererGeneric('updateImage');
         },
 
         /**
@@ -255,77 +236,51 @@ define([
             } else {
                 this.transformations.push(transform);
             }
-        },
-
-        /**
-         * Sets x and y coordinate of the image.
-         * @param {number} method The type of coordinates used here. Possible values are {@link JXG.COORDS_BY_USER} and {@link JXG.COORDS_BY_SCREEN}.
-         * @param {Array} coords coordinates in screen/user units of the mouse/touch position
-         * @param {Array} oldcoords coordinates in screen/user units of the previous mouse/touch position
-         * @returns {JXG.Image} this element
-         */
-        setPositionDirectly: function (method, coords, oldcoords) {
-            var dc,
-                c = new Coords(method, coords, this.board),
-                oldc = new Coords(method, oldcoords, this.board),
-                v = [this.Z(), this.X(), this.Y()];
-
-            dc = Statistics.subtract(c.usrCoords, oldc.usrCoords);
-
-            this.X = Type.createFunction(v[1] + dc[1], this.board, '');
-            this.Y = Type.createFunction(v[2] + dc[2], this.board, '');
-
-            /*
-            * In case of snapToGrid===true, first the coordinates of 
-            * the new position is set, then they are rounded to the grid.
-            * The resulting coordinates are set as functions X(), Y(),
-            * becasue they are set again in updateCoords().
-            */
-            if (this.visProp.snaptogrid) {
-                this.coords.setCoordinates(Const.COORDS_BY_USER, c.usrCoords);
-                this.snapToGrid();
-                this.X = Type.createFunction(this.coords.usrCoords[1], this.board, '');
-                this.Y = Type.createFunction(this.coords.usrCoords[2], this.board, '');
-            }
-            
-            return this;
-        },
-        
-        /**
-         * Alias for {@link JXG.Element#handleSnapToGrid}
-         * @returns {JXG.Text} Reference to this element
-         */
-        snapToGrid: function () {
-            return this.handleSnapToGrid();
-        }    
-
+        }
     });
 
     /**
      * @class Displays an image.
      * @pseudo
-     * @description Shows an image. The image can be supplied as an URL or an base64 encoded inline image
-     * like "data:image/png;base64, /9j/4AAQSkZJRgA..." or a function returning an URL: function(){ return 'xxx.png; }.
-     * @constructor
+     * @description 
      * @name Image
      * @type JXG.Image
+     * @augments JXG.Image
+     * @constructor
+     * @constructor
      * @throws {Exception} If the element cannot be constructed with the given parent objects an exception is thrown.
-     * @param {String_Array_Array} url,_topleft,_widthheight url defines the location of the image data. Optional topleft and
-     * widthheight define the user coordinates of the top left corner and the image's width and height.
+     * @param {string,function_Array_Array} url,coords,size url defines the location of the image data. The array coords contains the user coordinates 
+     * of the lower left corner of the image.
+     *   It can consist of two or three elements of type number, a string containing a GEONE<sub>x</sub>T
+     *   constraint, or a function which takes no parameter and returns a number. Every element determines one coordinate. If a coordinate is
+     *   given by a number, the number determines the initial position of a free text. If given by a string or a function that coordinate will be constrained
+     *   that means the user won't be able to change the texts's position directly by mouse because it will be calculated automatically depending on the string
+     *   or the function's return value. If two parent elements are given the coordinates will be interpreted as 2D affine Euclidean coordinates, if three such
+     *   parent elements are given they will be interpreted as homogeneous coordinates.
+     * <p>
+     * The array size defines the image's width and height in user coordinates.
      * @example
-     * var im = board.create('image', ['http://geonext.uni-bayreuth.de/fileadmin/geonext/design/images/logo.gif', [-3,1],[5,5]]);
+     * var im = board.create('image', ['http://jsxgraph.uni-bayreuth.de/jsxgraph/distrib/images/uccellino.jpg', [-3,-2], [3,3]]);
      *
      * </pre><div id="9850cda0-7ea0-4750-981c-68bacf9cca57" style="width: 400px; height: 400px;"></div>
      * <script type="text/javascript">
-     *   var image_board = JXG.JSXGraph.initBoard('9850cda0-7ea0-4750-981c-68bacf9cca57', {boundingbox: [-4, 4, 4, -4], axis: false, showcopyright: false, shownavigation: false});
-     *   var image_im = image_board.create('image', ['http://jsxgraph.uni-bayreuth.de/distrib/images/uccellino.jpg', [-3,1],[5,5]]);
+     *   var image_board = JXG.JSXGraph.initBoard('9850cda0-7ea0-4750-981c-68bacf9cca57', {boundingbox: [-4, 4, 4, -4], axis: true, showcopyright: false, shownavigation: false});
+     *   var image_im = image_board.create('image', ['http://jsxgraph.uni-bayreuth.de/distrib/images/uccellino.jpg', [-3,-2],[3,3]]);
      * </script><pre>
      */
     JXG.createImage = function (board, parents, attributes) {
-        var attr, im;
+        var attr, im,
+            url = parents[0],
+            coords = parents[1],
+            size = parents[2];
 
         attr = Type.copyAttributes(attributes, board.options, 'image');
-        im = new JXG.Image(board, parents[0], parents[1], parents[2], attr);
+        im = CoordsElement.create(JXG.Image, board, coords, attr, url, size);
+        if (!im) {
+            throw new Error("JSXGraph: Can't create image with parent types '" +
+                    (typeof parents[0]) + "' and '" + (typeof parents[1]) + "'." +
+                    "\nPossible parent types: [x,y], [z,x,y], [element,transformation]");
+        }
 
         if (Type.evaluate(attr.rotate) !== 0) {
             im.addRotation(Type.evaluate(attr.rotate));

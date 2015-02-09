@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2013
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -10,20 +10,20 @@
     This file is part of JSXGraph.
 
     JSXGraph is free software dual licensed under the GNU LGPL or MIT License.
-    
+
     You can redistribute it and/or modify it under the terms of the
-    
+
       * GNU Lesser General Public License as published by
         the Free Software Foundation, either version 3 of the License, or
         (at your option) any later version
       OR
       * MIT License: https://github.com/jsxgraph/jsxgraph/blob/master/LICENSE.MIT
-    
+
     JSXGraph is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU Lesser General Public License for more details.
-    
+
     You should have received a copy of the GNU Lesser General Public License and
     the MIT License along with JSXGraph. If not, see <http://www.gnu.org/licenses/>
     and <http://opensource.org/licenses/MIT/>.
@@ -61,7 +61,7 @@ define([
      * @pseudo
      * @description
      * @name Ellipse
-     * @augments JXG.Curve
+     * @augments Conic
      * @constructor
      * @type JXG.Curve
      * @throws {Exception} If the element cannot be constructed with the given parent objects an exception is thrown.
@@ -102,7 +102,7 @@ define([
             } else if (Type.isPoint(parents[i])) {
                 F[i] = board.select(parents[i]);
             // given by function
-            } else if ((typeof parents[i] === 'function') && (parents[i]().elementClass === Const.OBJECT_CLASS_POINT)) {
+            } else if ((typeof parents[i] === 'function') && (Type.isPoint(parents[i]()) )) {
                 F[i] = parents[i]();
             // focus i given by point name
             } else if (Type.isString(parents[i])) {
@@ -127,7 +127,7 @@ define([
             } else if (parents[2].length > 1) {
                 C = board.create('point', parents[2], attr_foci);
             // given by function
-            } else if ((typeof parents[2] === 'function') && (parents[2]().elementClass === Const.OBJECT_CLASS_POINT)) {
+            } else if ((typeof parents[2] === 'function') && (Type.isPoint(parents[2]()) )) {
                 C = parents[2]();
             // focus i given by point name
             } else if (Type.isString(parents[2])) {
@@ -228,7 +228,7 @@ define([
         curve.type = Const.OBJECT_TYPE_CONIC;
 
         /**
-         * Checks whether (x,y) is near the ellipse line or inside of the ellipse 
+         * Checks whether (x,y) is near the ellipse line or inside of the ellipse
          * (in case JXG.Options.conic#hasInnerPoints is true).
          * @param {Number} x Coordinate in x direction, screen coordinates.
          * @param {Number} y Coordinate in y direction, screen coordinates.
@@ -276,7 +276,7 @@ define([
      * @pseudo
      * @description
      * @name Hyperbola
-     * @augments JXG.Curve
+     * @augments Conic
      * @constructor
      * @type JXG.Curve
      * @throws {Exception} If the element cannot be constructed with the given parent objects an exception is thrown.
@@ -316,7 +316,7 @@ define([
             } else if (Type.isPoint(parents[i])) {
                 F[i] = board.select(parents[i]);
             // given by function
-            } else if ((typeof parents[i] === 'function') && (parents[i]().elementClass === Const.OBJECT_CLASS_POINT)) {
+            } else if ((typeof parents[i] === 'function') && (Type.isPoint(parents[i]()) )) {
                 F[i] = parents[i]();
             // focus i given by point name
             } else if (Type.isString(parents[i])) {
@@ -341,7 +341,7 @@ define([
             } else if (parents[2].length > 1) {
                 C = board.create('point', parents[2], attr_foci);
             // given by function
-            } else if ((typeof parents[2] === 'function') && (parents[2]().elementClass === Const.OBJECT_CLASS_POINT)) {
+            } else if ((typeof parents[2] === 'function') && (Type.isPoint(parents[2]()))) {
                 C = parents[2]();
             // focus i given by point name
             } else if (Type.isString(parents[2])) {
@@ -461,7 +461,7 @@ define([
      * @pseudo
      * @description
      * @name Parabola
-     * @augments JXG.Curve
+     * @augments Conic
      * @constructor
      * @type JXG.Curve
      * @throws {Exception} If the element cannot be constructed with the given parent objects an exception is thrown.
@@ -500,7 +500,7 @@ define([
         } else if (Type.isPoint(parents[0])) {
             F1 = board.select(parents[0]);
         // given by function
-        } else if ((typeof parents[0] === 'function') && (parents[0]().elementClass === Const.OBJECT_CLASS_POINT)) {
+        } else if ((typeof parents[0] === 'function') && (Type.isPoint(parents[0]()) )) {
             F1 = parents[0]();
         // focus i given by point name
         } else if (Type.isString(parents[0])) {
@@ -523,10 +523,12 @@ define([
 
         M = board.create('point', [
             function () {
+                /*
                 var v = [0, l.stdform[1], l.stdform[2]];
-
                 v = Mat.crossProduct(v, F1.coords.usrCoords);
                 return Geometry.meetLineLine(v, l.stdform, 0, board).usrCoords;
+                */
+                return Geometry.projectPointToLine(F1, l, board).usrCoords;
             }
         ], attr_foci);
 
@@ -568,6 +570,12 @@ define([
                 B = l.point2.coords.usrCoords,
                 M = F1.coords.usrCoords;
 
+            // Handle the case if one of the two defining points of the line is an ideal point
+            if (A[0] === 0) {
+                A = [1, B[1] + l.stdform[2], B[2] - l.stdform[1]];
+            } else if (B[0] === 0) {
+                B = [1, A[1] + l.stdform[2], A[2] - l.stdform[1]];
+            }
             det = ((B[1] - A[1]) * (M[2] - A[2]) - (B[2] - A[2]) * (M[1] - A[1]) >= 0) ? 1 : -1;
             a = det * d / (1 - Math.sin(phi));
 
@@ -587,6 +595,12 @@ define([
                 B = l.point2.coords.usrCoords,
                 M = F1.coords.usrCoords;
 
+            // Handle the case if one of the two defining points of the line is an ideal point
+            if (A[0] === 0) {
+                A = [1, B[1] + l.stdform[2], B[2] - l.stdform[1]];
+            } else if (B[0] === 0) {
+                B = [1, A[1] + l.stdform[2], A[2] - l.stdform[1]];
+            }
             det = ((B[1] - A[1]) * (M[2] - A[2]) - (B[2] - A[2]) * (M[1] - A[1]) >= 0) ? 1 : -1;
             a = det * d / (1 - Math.sin(phi));
 
@@ -679,7 +693,7 @@ define([
                 } else if (Type.isPoint(parents[i])) {
                     points[i] = board.select(parents[i]);
                 // given by function
-                } else if ((typeof parents[i] === 'function') && (parents[i]().elementClass === Const.OBJECT_CLASS_POINT)) {
+                } else if ((typeof parents[i] === 'function') && (Type.isPoint(parents[i]()) )) {
                     points[i] = parents[i]();
                 // point i given by point name
                 } else if (Type.isString(parents[i])) {

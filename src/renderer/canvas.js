@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2013
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -235,7 +235,11 @@ define([
                 hasColor = false;
             }
             if (type === 'stroke' && !isNaN(parseFloat(ev.strokewidth))) {
-                this.context.lineWidth = parseFloat(ev.strokewidth);
+                if (parseFloat(ev.strokewidth) === 0) {
+                    this.context.globalAlpha = 0;
+                } else {
+                    this.context.lineWidth = parseFloat(ev.strokewidth);
+                }
             }
             return hasColor;
         },
@@ -314,6 +318,8 @@ define([
                 context.lineTo(scr[1] + size, scr[2] + size);
                 context.moveTo(scr[1] + size, scr[2] - size);
                 context.lineTo(scr[1] - size, scr[2] + size);
+                context.lineCap = 'round';
+                context.lineJoin = 'round';
                 context.closePath();
                 this._stroke(el);
                 break;
@@ -348,6 +354,8 @@ define([
                 context.lineTo(scr[1] + size, scr[2]);
                 context.moveTo(scr[1], scr[2] - size);
                 context.lineTo(scr[1], scr[2] + size);
+                context.lineCap = 'round';
+                context.lineJoin = 'round';
                 context.closePath();
                 this._stroke(el);
                 break;
@@ -498,6 +506,7 @@ define([
                     this.updateText(ticks.labels[i]);
                 }
             }
+            context.lineCap = 'round';
             this._stroke(ticks);
         },
 
@@ -654,7 +663,7 @@ define([
                     oo = o * rgbo[1];
                 }
                 node = el.rendNode;
-                if (el.type === Const.OBJECT_TYPE_TEXT && el.visProp.display === 'html') {
+                if (el.elementClass === Const.OBJECT_CLASS_TEXT && el.visProp.display === 'html') {
                     node.style.color = c;
                     node.style.opacity = oo;
                 }
@@ -817,7 +826,7 @@ define([
                 symbc = 'C',
                 nextSymb = symbm,
                 maxSize = 5000.0,
-                isNotPlot = (el.visProp.curvetype !== 'plot'),
+                //isNotPlot = (el.visProp.curvetype !== 'plot'),
                 context = this.context;
 
             if (el.numberPoints <= 0) {
@@ -828,9 +837,11 @@ define([
             context.beginPath();
 
             if (el.bezierDegree === 1) {
+                /*
                 if (isNotPlot && el.board.options.curve.RDPsmoothing) {
-                    el.points = Numerics.RamerDouglasPeuker(el.points, 0.5);
+                    el.points = Numerics.RamerDouglasPeucker(el.points, 0.5);
                 }
+                */
 
                 for (i = 0; i < len; i++) {
                     scr = el.points[i].scrCoords;
@@ -880,6 +891,7 @@ define([
                     i += 1;
                 }
             }
+            context.lineCap = 'round';
             this._fill(el);
             this._stroke(el);
         },
@@ -900,7 +912,7 @@ define([
             }
 
             if (isNoPlot && el.board.options.curve.RDPsmoothing) {
-                el.points = Numerics.RamerDouglasPeuker(el.points, 0.5);
+                el.points = Numerics.RamerDouglasPeucker(el.points, 0.5);
             }
 
             len = Math.min(el.points.length, el.numberPoints);
@@ -946,6 +958,7 @@ define([
                     }
                 }
             }
+            context.lineCap = 'round';
             this._fill(el);
             this._stroke(el);
         },
@@ -1027,7 +1040,7 @@ define([
 
         // documented in AbstractRenderer
         highlight: function (obj) {
-            if (obj.type === Const.OBJECT_TYPE_TEXT && obj.visProp.display === 'html') {
+            if (obj.elementClass === Const.OBJECT_CLASS_TEXT && obj.visProp.display === 'html') {
                 this.updateTextStyle(obj, true);
             } else {
                 obj.board.prepareUpdate();
@@ -1040,7 +1053,7 @@ define([
 
         // documented in AbstractRenderer
         noHighlight: function (obj) {
-            if (obj.type === Const.OBJECT_TYPE_TEXT && obj.visProp.display === 'html') {
+            if (obj.elementClass === Const.OBJECT_CLASS_TEXT && obj.visProp.display === 'html') {
                 this.updateTextStyle(obj, false);
             } else {
                 obj.board.prepareUpdate();

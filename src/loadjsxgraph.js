@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2013
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -38,7 +38,7 @@
 
 /**
  * JSXGraph namespace. Holds all classes, objects, functions and variables belonging to JSXGraph
- * to reduce the risc of interfering with other JavaScript code.
+ * to reduce the risk of interfering with other JavaScript code.
  * @namespace
  */
 var JXG = {},
@@ -128,11 +128,27 @@ var JXG = {},
         return inc;
     };
 
-    JXG.require = function (libraryName) {
-        document.write('<script type="text/javascript" src="' + libraryName + '"><\/script>');
+    JXG.isMetroApp = function () {
+        return typeof window === 'object' && window.clientInformation && window.clientInformation.appVersion && window.clientInformation.appVersion.indexOf('MSAppHost') > -1;
     };
 
-    JXG.baseFiles = 'jxg,base/constants,utils/type,utils/xml,utils/env,utils/event,utils/expect,math/math,math/numerics,math/statistics,math/symbolic,math/geometry,math/poly,math/complex,renderer/abstract,renderer/no,reader/file,parser/geonext,base/board,options,jsxgraph,base/element,base/coords,base/point,base/line,base/group,base/circle,element/conic,base/polygon,base/curve,element/arc,element/sector,base/composition,element/composition,base/text,base/image,element/slider,element/measure,base/chart,base/transformation,base/turtle,utils/color,base/ticks,utils/zip,utils/base64,utils/uuid,utils/encoding,server/server,element/locus,parser/datasource,parser/jessiecode,utils/dump,renderer/svg,renderer/vml,renderer/canvas,renderer/no,element/slopetriangle,math/qdt';
+    JXG.require = function (libraryName) {
+       if (JXG.isMetroApp()) { // avoid inline code manipulation in Windows apps -- isMetroApp can't be used it is not yet available at this point
+            var scriptElement = document.createElement("script");
+            var typeAttribute = document.createAttribute("type");
+            typeAttribute.nodeValue = "text/javascript";
+            var srcAttribute = document.createAttribute("src");
+            srcAttribute.nodeValue = libraryName;
+            scriptElement.setAttributeNode(typeAttribute);
+            scriptElement.setAttributeNode(srcAttribute);
+            var headElement = document.getElementsByTagName("head")[0];
+            headElement.appendChild(scriptElement);
+        } else {
+            document.write('<script type="text/javascript" src="' + libraryName + '"><\/script>');
+        }
+    };
+
+    JXG.baseFiles = 'jxg,base/constants,utils/type,utils/xml,utils/env,utils/event,utils/expect,math/math,math/numerics,math/statistics,math/symbolic,math/geometry,math/poly,math/complex,renderer/abstract,renderer/no,reader/file,parser/geonext,base/board,options,jsxgraph,base/element,base/coordselement,base/coords,base/point,base/line,base/group,base/circle,element/conic,base/polygon,base/curve,element/arc,element/sector,base/composition,element/composition,base/text,base/image,element/slider,element/measure,base/chart,base/transformation,base/turtle,utils/color,base/ticks,utils/zip,utils/base64,utils/uuid,utils/encoding,server/server,element/locus,parser/datasource,parser/jessiecode,utils/dump,renderer/svg,renderer/vml,renderer/canvas,renderer/no,element/slopetriangle,math/qdt,element/checkbox,element/input,element/button';
     JXG.requirePath = '';
 
     for (i = 0; i < document.getElementsByTagName("script").length; i++) {
@@ -149,8 +165,8 @@ var JXG = {},
     JXG.baseFiles = null;
     JXG.serverBase = JXG.requirePath + 'server/';
 
-    // this is a table with functions which check the availability
-    // of certain namespaces, functions and classes. with this structure
+    // This is a table with functions which check the availability
+    // of certain namespaces, functions and classes. With this structure
     // we are able to get a rough check if a specific dependency is available.
     table = {
         'jsxgraph': checkJXG,
@@ -163,6 +179,7 @@ var JXG = {},
         'base/composition': makeCheck('Composition'),
         'base/constants': checkJXG,
         'base/coords': makeCheck('Coords'),
+        'base/coordselement': makeCheck('CoordsElement'),
         'base/curve': checkJXG,
         'base/element': makeCheck('GeometryElement'),
         'base/group': checkJXG,
@@ -185,6 +202,9 @@ var JXG = {},
         'element/slider': checkJXG,
         'element/square': checkJXG,
         'element/triangle': checkJXG,
+        'element/checkbox': checkJXG,
+        'element/input': checkJXG,
+        'element/button': checkJXG,
 
         'math/bst': makeCheck('Math.BST'),
         'math/qdt': makeCheck('Math.Quadtree'),

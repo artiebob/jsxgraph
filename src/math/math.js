@@ -1,5 +1,5 @@
 /*
-    Copyright 2008-2014
+    Copyright 2008-2015
         Matthias Ehmann,
         Michael Gerhaeuser,
         Carsten Miller,
@@ -10,20 +10,20 @@
     This file is part of JSXGraph.
 
     JSXGraph is free software dual licensed under the GNU LGPL or MIT License.
-    
+
     You can redistribute it and/or modify it under the terms of the
-    
+
       * GNU Lesser General Public License as published by
         the Free Software Foundation, either version 3 of the License, or
         (at your option) any later version
       OR
       * MIT License: https://github.com/jsxgraph/jsxgraph/blob/master/LICENSE.MIT
-    
+
     JSXGraph is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU Lesser General Public License for more details.
-    
+
     You should have received a copy of the GNU Lesser General Public License and
     the MIT License along with JSXGraph. If not, see <http://www.gnu.org/licenses/>
     and <http://opensource.org/licenses/MIT/>.
@@ -42,7 +42,7 @@
  * for namespaces like Math.Numerics, Math.Algebra, Math.Statistics etc.
  */
 
-define(['jxg'], function (JXG) {
+define(['jxg', 'utils/type'], function (JXG, Type) {
 
     "use strict";
 
@@ -533,7 +533,7 @@ define(['jxg'], function (JXG) {
          * @param {Number} x
          * @returns {Number} log10(x) Logarithm of x to base 10.
          */
-        log10: function(x) {
+        log10: function (x) {
             return Math.log(x) / Math.log(10.0);
         },
 
@@ -542,10 +542,24 @@ define(['jxg'], function (JXG) {
          * @param {Number} x
          * @returns {Number} log2(x) Logarithm of x to base 2.
          */
-        log2: function(x) {
+        log2: function (x) {
             return Math.log(x) / Math.log(2.0);
         },
-        
+
+        /**
+         * Logarithm to arbitrary base b. If b is not given, natural log is taken, i.e. b = e.
+         * @param {Number} x
+         * @param {Number} b base
+         * @returns {Number} log(x, b) Logarithm of x to base b, that is log(x)/log(b).
+         */
+        log: function (x, b) {
+            if (typeof b !== 'undefined' && Type.isNumber(b)) {
+                return Math.log(x) / Math.log(b);
+            } else {
+                return Math.log(x);
+            }
+        },
+
         /**
          * A square & multiply algorithm to compute base to the power of exponent.
          * Implementated by Wolfgang Riedl.
@@ -595,7 +609,7 @@ define(['jxg'], function (JXG) {
             stdform[6] = -stdform[1] / a2;
             stdform[7] = -stdform[2] / a2;
 
-            if (r === Infinity || isNaN(r)) {
+            if (!isFinite(r)) {
                 n = Math.sqrt(stdform[1] * stdform[1] + stdform[2] * stdform[2]);
 
                 stdform[0] /= n;
