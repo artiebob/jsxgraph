@@ -763,6 +763,8 @@ define([
                     }
                 }
             }
+						
+						labelText = labelText.replace(/\-/g, "&#8722;");
 
             return labelText;
         },
